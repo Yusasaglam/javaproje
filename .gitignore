@@ -1,0 +1,47 @@
+# Derleme çıktıları
+*.class
+*.jar
+*.war
+*.ear
+out/
+bin/
+build/
+target/
+
+# Çalışma zamanı dosyaları
+banka_durumu.dat
+banka_kayit.txt
+*.dat
+*.log
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Geçici dosyalar
+*.tmp
+*.swp
+*~
+
+
+# Local JDK - GitHub'a gönderilmez
+SRC/oracleJdk-26/
+oracleJdk-26/
+
+src/oracleJdk-26/
+SRC/oracleJdk-26/
+oracleJdk-26/

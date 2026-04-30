@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Program Files/Java//**)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files/Microsoft//**)",
+      "Bash(cmd //c \"where javac\")",
+      "Bash('/c/Users/YUŞA/AppData/Roaming/Code/User/workspaceStorage/863877a6819509aa345db399ddcef805/redhat.java/ss_ws/java uygulama_76e41ab5/bin/oracleJdk-25/bin/javac.exe' -version)"
+    ]
+  }
+}
