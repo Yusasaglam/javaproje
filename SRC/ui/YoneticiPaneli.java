@@ -137,9 +137,21 @@ public class YoneticiPaneli extends BorderPane {
         // Tablo
         musteriTablo = UITema.tablo("Müşteri No", "Ad Soyad", "E-posta", "Hesap Sayısı");
         musteriTablo.setPrefHeight(300);
-        Button yenileBtn = UITema.normalButon("Listeyi Yenile");
+        Button yenileBtn  = UITema.normalButon("Listeyi Yenile");
+        Button musteriSilBtn = UITema.tehlikeButon("🗑 Müşteri Sil");
         yenileBtn.setOnAction(e -> musterileriYenile());
-        VBox tabloKart = tabloKartOlustur("Müşteri Listesi", musteriTablo, yenileBtn);
+        musteriSilBtn.setOnAction(e -> {
+            int idx = musteriTablo.getSelectionModel().getSelectedIndex();
+            if (idx < 0) { UITema.uyari("Uyarı", "Lütfen bir müşteri seçin."); return; }
+            String mId = musteriTablo.getItems().get(idx).get(0);
+            if (!UITema.onay("Müşteri Sil", mId + " numaralı müşteri ve tüm hesapları silinecek.\nOnaylıyor musunuz?")) return;
+            kontrolcu.musteriSil(mId);
+            musterileriYenile();
+            musteriComboGuncelle(hesapMusteriCombo, false);
+            musteriComboGuncelle(kulMusteriCombo, true);
+            hesaplariYenile();
+        });
+        VBox tabloKart = tabloKartOlustur("Müşteri Listesi", musteriTablo, musteriSilBtn, yenileBtn);
 
         panel.getChildren().addAll(form, tabloKart);
         musterileriYenile();
@@ -203,8 +215,18 @@ public class YoneticiPaneli extends BorderPane {
             kontrolcu.isaretKaldir(hesapTablo.getItems().get(idx).get(0));
             hesaplariYenile();
         });
+        Button hesapSilBtn = UITema.tehlikeButon("🗑 Hesap Sil");
         yenile.setOnAction(e -> hesaplariYenile());
-        VBox tabloKart = tabloKartOlustur("Hesap Listesi", hesapTablo, isaretle, kaldir, detayBtn, yenile);
+        hesapSilBtn.setOnAction(e -> {
+            int idx = hesapTablo.getSelectionModel().getSelectedIndex();
+            if (idx < 0) { UITema.uyari("Uyarı", "Lütfen bir hesap seçin."); return; }
+            String hId = hesapTablo.getItems().get(idx).get(0);
+            if (!UITema.onay("Hesap Sil", hId + " numaralı hesap silinecek.\nOnaylıyor musunuz?")) return;
+            kontrolcu.hesapSil(hId);
+            hesaplariYenile();
+            hesapComboGuncelle(pyHesapCombo); hesapComboGuncelle(pcHesapCombo); hesapComboGuncelle(trKaynakCombo);
+        });
+        VBox tabloKart = tabloKartOlustur("Hesap Listesi", hesapTablo, isaretle, kaldir, detayBtn, hesapSilBtn, yenile);
 
         panel.getChildren().addAll(form, tabloKart);
         musteriComboGuncelle(hesapMusteriCombo, false);
@@ -420,6 +442,7 @@ public class YoneticiPaneli extends BorderPane {
             UITema.durumGoster(adminSifreDurumLabel, "Şifre en az 6 karakter olmalıdır.", false); return;
         }
         if (kontrolcu.sifreSifirla(kulAdi, yeniSif)) {
+            kontrolcu.durumKaydet("banka_durumu.dat");
             UITema.durumGoster(adminSifreDurumLabel, kulAdi + " şifresi sıfırlandı.", true);
             adminSifreKulAdiField.clear(); adminYeniSifreField.clear();
         } else {
@@ -638,6 +661,7 @@ public class YoneticiPaneli extends BorderPane {
             if (bakiye < 0) throw new NumberFormatException();
             Account hesap = kontrolcu.hesapOlustur(musteriId, tur, bakiye);
             if (hesap == null) { UITema.hata("Hata", "Müşteri bulunamadı."); return; }
+            kontrolcu.durumKaydet("banka_durumu.dat");
             baslangicBakiyeField.clear();
             hesaplariYenile();
             hesapComboGuncelle(pyHesapCombo); hesapComboGuncelle(pcHesapCombo); hesapComboGuncelle(trKaynakCombo);
@@ -731,8 +755,10 @@ public class YoneticiPaneli extends BorderPane {
     // ── Yenileme ──────────────────────────────────────────────────────────────
     private void musterileriYenile() {
         musteriTablo.getItems().clear();
-        for (Customer m : kontrolcu.tumMusteriler())
-            UITema.satirEkle(musteriTablo, m.getMusteriId(), m.getAd(), m.getEposta(), String.valueOf(m.getHesaplar().size()));
+        for (Customer m : kontrolcu.tumMusteriler()) {
+            String ad = kontrolcu.isDemoMusteri(m.getMusteriId()) ? "[DEMO] " + m.getAd() : m.getAd();
+            UITema.satirEkle(musteriTablo, m.getMusteriId(), ad, m.getEposta(), String.valueOf(m.getHesaplar().size()));
+        }
     }
 
     private void hesaplariYenile() {
@@ -977,6 +1003,7 @@ public class YoneticiPaneli extends BorderPane {
         sonuclarBtn.setDisable(true);
         botSimLoglar = null;
 
+        kontrolcu.getKaydedici().setSessiz(true);
         new Thread(() -> {
             java.util.Random rand = new java.util.Random(42L);
             java.util.List<Account> liste = new java.util.ArrayList<>(hesaplar);
@@ -1275,6 +1302,7 @@ public class YoneticiPaneli extends BorderPane {
             final java.util.List<String> sonLoglar = L;
             final int fb = basarili, fsz = basarisiz;
             Platform.runLater(() -> {
+                kontrolcu.getKaydedici().setSessiz(false);
                 raporlariYenile(); hesaplariYenile(); riskTablosunuYenile();
                 botSimLoglar = sonLoglar;
                 sonuclarBtn.setDisable(false);
@@ -1437,6 +1465,7 @@ public class YoneticiPaneli extends BorderPane {
 
         // ── Müşteri 1: Ahmet Yılmaz — GÜVENLİ (skor 0) ───────────────────────
         Customer ahmet = kontrolcu.musteriOlustur("Ahmet Yılmaz", "ahmet@ornek.com");
+        kontrolcu.demoMusteriIsaretle(ahmet.getMusteriId());
         kimlikDogrulama.kullaniciEkle(new Kullanici("ahmet", "Ahmet123", Kullanici.Rol.MUSTERI, ahmet.getMusteriId()));
         Account ahmetV  = kontrolcu.hesapOlustur(ahmet.getMusteriId(), "VADESİZ", 12000);
         Account ahmetVd = kontrolcu.hesapOlustur(ahmet.getMusteriId(), "VADELİ",  35000);
@@ -1447,6 +1476,7 @@ public class YoneticiPaneli extends BorderPane {
 
         // ── Müşteri 2: Fatma Şahin — İZLENİYOR (skor 45) ─────────────────────
         Customer fatma = kontrolcu.musteriOlustur("Fatma Şahin", "fatma@ornek.com");
+        kontrolcu.demoMusteriIsaretle(fatma.getMusteriId());
         kimlikDogrulama.kullaniciEkle(new Kullanici("fatma", "Fatma123", Kullanici.Rol.MUSTERI, fatma.getMusteriId()));
         Account fatmaV   = kontrolcu.hesapOlustur(fatma.getMusteriId(), "VADESİZ",   28000);
         Account fatmaUSD = kontrolcu.hesapOlustur(fatma.getMusteriId(), "DÖVİZ-USD", 600);
@@ -1459,6 +1489,7 @@ public class YoneticiPaneli extends BorderPane {
 
         // ── Müşteri 3: Mehmet Demir — RİSKLİ (skor 75) ───────────────────────
         Customer mehmet = kontrolcu.musteriOlustur("Mehmet Demir", "mehmet@ornek.com");
+        kontrolcu.demoMusteriIsaretle(mehmet.getMusteriId());
         kimlikDogrulama.kullaniciEkle(new Kullanici("mehmet", "Mehmet123", Kullanici.Rol.MUSTERI, mehmet.getMusteriId()));
         Account mehmetV   = kontrolcu.hesapOlustur(mehmet.getMusteriId(), "VADESİZ",   80000);
         Account mehmetEUR = kontrolcu.hesapOlustur(mehmet.getMusteriId(), "DÖVİZ-EUR", 1500);
@@ -1471,6 +1502,7 @@ public class YoneticiPaneli extends BorderPane {
 
         // ── Müşteri 4: Zeynep Kaya — ŞÜPHELİ (otomatik dondurulmuş) ──────────
         Customer zeynep = kontrolcu.musteriOlustur("Zeynep Kaya", "zeynep@ornek.com");
+        kontrolcu.demoMusteriIsaretle(zeynep.getMusteriId());
         kimlikDogrulama.kullaniciEkle(new Kullanici("zeynep", "Zeynep123", Kullanici.Rol.MUSTERI, zeynep.getMusteriId()));
         Account zeynepV   = kontrolcu.hesapOlustur(zeynep.getMusteriId(), "VADESİZ",   55000);
         Account zeynepGBP = kontrolcu.hesapOlustur(zeynep.getMusteriId(), "DÖVİZ-GBP", 200);

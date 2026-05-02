@@ -56,6 +56,7 @@ public class BankController implements IBankService {
     private final KimlikDogrulama          kimlikDogrulama;
     private final List<RiskDinleyici>      dinleyiciler;
     private final Map<String, BekleyenIslem> bekleyenIslemler;
+    private final Set<String>              demoMusteri;
     private BekleyenIslem sonBekleyenIslem;
     private int islemSayaci;
     private int musteriSayaci;
@@ -72,6 +73,7 @@ public class BankController implements IBankService {
         this.kimlikDogrulama = kimlikDogrulama;
         this.dinleyiciler    = new CopyOnWriteArrayList<>();
         this.bekleyenIslemler = new java.util.LinkedHashMap<>();
+        this.demoMusteri     = new HashSet<>();
     }
 
     // ── Observer yönetimi ─────────────────────────────────────────────────────
@@ -390,6 +392,44 @@ public class BankController implements IBankService {
             if (musteriId.equals(h.getSahibiId())) sonuc.add(h);
         return sonuc;
     }
+
+    // ── Silme işlemleri ───────────────────────────────────────────────────────
+
+    public boolean musteriSil(String musteriId) {
+        Customer m = musteriDeposu.idIleGetir(musteriId);
+        if (m == null) return false;
+        for (Account h : new ArrayList<>(m.getHesaplar())) {
+            hesapDeposu.sil(h.getHesapId());
+            suphelihHesaplar.remove(h.getHesapId());
+            supheSebebleri.remove(h.getHesapId());
+        }
+        musteriDeposu.sil(musteriId);
+        demoMusteri.remove(musteriId);
+        for (Kullanici k : kimlikDogrulama.getKullanicilar().values()) {
+            if (musteriId.equals(k.getMusteriId())) { k.pasifYap(); break; }
+        }
+        kaydedici.kaydet("MUSTERI_SILINDI: " + musteriId);
+        durumKaydet(KAYIT_DOSYASI);
+        return true;
+    }
+
+    public boolean hesapSil(String hesapId) {
+        Account h = hesapDeposu.idIleGetir(hesapId);
+        if (h == null) return false;
+        Customer m = musteriDeposu.idIleGetir(h.getSahibiId());
+        if (m != null) m.getHesaplar().remove(h);
+        hesapDeposu.sil(hesapId);
+        suphelihHesaplar.remove(hesapId);
+        supheSebebleri.remove(hesapId);
+        kaydedici.kaydet("HESAP_SILINDI: " + hesapId);
+        durumKaydet(KAYIT_DOSYASI);
+        return true;
+    }
+
+    // ── Demo veri takibi ──────────────────────────────────────────────────────
+
+    public void demoMusteriIsaretle(String musteriId) { demoMusteri.add(musteriId); }
+    public boolean isDemoMusteri(String musteriId)    { return demoMusteri.contains(musteriId); }
 
     // ── Kalıcılık ─────────────────────────────────────────────────────────────
 

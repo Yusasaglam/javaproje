@@ -2,20 +2,25 @@
   "java.project.sourcePaths": [
     "SRC"
   ],
+
   "java.project.outputPath": "bin",
 
-  "java.jdt.ls.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.0.36-hotspot",
+  "java.jdt.ls.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.11.10-hotspot",
 
   "java.configuration.runtimes": [
     {
-      "name": "JavaSE-25",
-      "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.0.36-hotspot",
+      "name": "JavaSE-21",
+      "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.11.10-hotspot",
       "default": true
     }
   ],
 
   "java.project.referencedLibraries": [
-    "C:\\Users\\tunce\\OneDrive\\Desktop\\javafx-sdk-26.0.1\\lib\\*.jar"
+    "C:\\Java\\javafx-sdk-21\\lib\\javafx.base.jar",
+    "C:\\Java\\javafx-sdk-21\\lib\\javafx.controls.jar",
+    "C:\\Java\\javafx-sdk-21\\lib\\javafx.fxml.jar",
+    "C:\\Java\\javafx-sdk-21\\lib\\javafx.graphics.jar",
+    "C:\\Java\\javafx-sdk-21\\lib\\javafx.swing.jar"
   ],
 
   "java.debug.settings.onBuildFailureProceed": true,

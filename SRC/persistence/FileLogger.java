@@ -8,8 +8,12 @@ import java.time.LocalDateTime;
 public class FileLogger {
 
     private static final String LOG_DOSYASI = "banka_kayit.txt";
+    private boolean sessiz = false;
+
+    public void setSessiz(boolean s) { this.sessiz = s; }
 
     public void kaydet(String mesaj) {
+        if (sessiz) return;
         try (java.io.FileWriter fw = new java.io.FileWriter(LOG_DOSYASI, true);
              BufferedWriter bw = new BufferedWriter(fw)) {
             bw.write("[" + LocalDateTime.now() + "] " + mesaj);

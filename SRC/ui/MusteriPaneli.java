@@ -728,6 +728,7 @@ public class MusteriPaneli extends BorderPane {
             UITema.durumGoster(sifreDurumLabel, "Yeni şifre en az 6 karakter olmalıdır.", false); return;
         }
         if (kontrolcu.sifreDegistir(kullanici.getKullaniciAdi(), eski, yeni)) {
+            kontrolcu.durumKaydet("banka_durumu.dat");
             UITema.durumGoster(sifreDurumLabel, "Şifreniz başarıyla güncellendi.", true);
             eskiSifreField.clear(); yeniSifreField.clear(); yeniSifreTekrarField.clear();
         } else {
