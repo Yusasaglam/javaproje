@@ -1,6 +1,7 @@
 package model;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -8,7 +9,7 @@ import java.util.Set;
 @SuppressWarnings("serial")
 public class BankState implements Serializable {
 
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
 
     private final List<Customer>             musteriler;
     private final List<Account>              hesaplar;
@@ -16,6 +17,8 @@ public class BankState implements Serializable {
     private final Set<String>                suphelihHesaplar;
     private final Map<String, SupheSebebi>   supheSebebleri;
     private final Map<String, HesapLimiti>   hesapLimitleri;
+    private final Map<String, Integer>       riskSkorlari;
+    private final Map<String, LocalDate>     skorGuncelleme;
     private final int musteriSayaci;
     private final int hesapSayaci;
     private final int islemSayaci;
@@ -23,16 +26,19 @@ public class BankState implements Serializable {
     public BankState(List<Customer> musteriler, List<Account> hesaplar,
                      Map<String, Kullanici> kullanicilar, Set<String> suphelihHesaplar,
                      Map<String, SupheSebebi> supheSebebleri, Map<String, HesapLimiti> hesapLimitleri,
+                     Map<String, Integer> riskSkorlari, Map<String, LocalDate> skorGuncelleme,
                      int musteriSayaci, int hesapSayaci, int islemSayaci) {
-        this.musteriler      = musteriler;
-        this.hesaplar        = hesaplar;
-        this.kullanicilar    = kullanicilar;
+        this.musteriler       = musteriler;
+        this.hesaplar         = hesaplar;
+        this.kullanicilar     = kullanicilar;
         this.suphelihHesaplar = suphelihHesaplar;
-        this.supheSebebleri  = supheSebebleri;
-        this.hesapLimitleri  = hesapLimitleri;
-        this.musteriSayaci   = musteriSayaci;
-        this.hesapSayaci     = hesapSayaci;
-        this.islemSayaci     = islemSayaci;
+        this.supheSebebleri   = supheSebebleri;
+        this.hesapLimitleri   = hesapLimitleri;
+        this.riskSkorlari     = riskSkorlari;
+        this.skorGuncelleme   = skorGuncelleme;
+        this.musteriSayaci    = musteriSayaci;
+        this.hesapSayaci      = hesapSayaci;
+        this.islemSayaci      = islemSayaci;
     }
 
     public List<Customer>           getMusteriler()       { return musteriler; }
@@ -41,6 +47,8 @@ public class BankState implements Serializable {
     public Set<String>              getSuphelihHesaplar() { return suphelihHesaplar; }
     public Map<String, SupheSebebi> getSupheSebebleri()   { return supheSebebleri; }
     public Map<String, HesapLimiti> getHesapLimitleri()   { return hesapLimitleri; }
+    public Map<String, Integer>     getRiskSkorlari()     { return riskSkorlari; }
+    public Map<String, LocalDate>   getSkorGuncelleme()   { return skorGuncelleme; }
     public int getMusteriSayaci()                         { return musteriSayaci; }
     public int getHesapSayaci()                           { return hesapSayaci; }
     public int getIslemSayaci()                           { return islemSayaci; }

@@ -16,5 +16,6 @@ public class SavingsAccount extends Account {
     @Override
     public String getHesapTuru() { return "VADELİ"; }
 
-    public double getFaizOrani() { return faizOrani; }
+    public double getFaizOrani()              { return faizOrani; }
+    public void   setFaizOrani(double oran)   { this.faizOrani = oran; }
 }

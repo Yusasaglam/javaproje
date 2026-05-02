@@ -1,14 +1,21 @@
 package ui;
 
+
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
+
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.util.Duration;
 
 import java.util.Locale;
 
@@ -108,7 +115,7 @@ class UITema {
     }
 
     // ── TableView fabrikası ───────────────────────────────────────────────────
-    @SuppressWarnings("unchecked")
+  
     static TableView<ObservableList<String>> tablo(String... sutunlar) {
         TableView<ObservableList<String>> tv = new TableView<>();
         for (int i = 0; i < sutunlar.length; i++) {
@@ -173,5 +180,67 @@ class UITema {
         label.setText(mesaj);
         label.setStyle("-fx-font-weight: bold; -fx-text-fill: " +
                 (basarili ? HEX_BASARILI : HEX_HATA) + ";");
+    }
+
+    // ── Toast Bildirimi ───────────────────────────────────────────────────────
+
+    /**
+     * Sahnenin sağ alt köşesinde 3 saniyelik animasyonlu toast bildirimi gösterir.
+     * @param sahne  gösterileceği JavaFX sahnesi
+     * @param mesaj  bildirim metni
+     * @param basarili true → yeşil, false → kırmızı, null → turuncu (uyarı)
+     */
+    static void toast(Scene sahne, String mesaj, Boolean basarili) {
+        if (sahne == null) return;
+        Platform.runLater(() -> {
+            String renk = basarili == null ? HEX_UYARI
+                         : basarili        ? HEX_BASARILI
+                                          : HEX_HATA;
+
+            Label label = new Label(mesaj);
+            label.setFont(Font.font("System", FontWeight.BOLD, 13));
+            label.setStyle("-fx-text-fill: white; -fx-padding: 10 18 10 18;");
+            label.setWrapText(true);
+            label.setMaxWidth(340);
+
+            StackPane popup = new StackPane(label);
+            popup.setStyle("-fx-background-color: " + renk + ";"
+                    + "-fx-background-radius: 8;"
+                    + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 10, 0, 0, 3);");
+            popup.setOpacity(0);
+            popup.setMouseTransparent(true);
+
+            StackPane katman = (StackPane) sahne.lookup("#toastKatmani");
+            if (katman == null) {
+                katman = new StackPane();
+                katman.setId("toastKatmani");
+                katman.setPickOnBounds(false);
+                katman.setMouseTransparent(true);
+                katman.setAlignment(Pos.BOTTOM_RIGHT);
+                katman.setPadding(new Insets(0, 20, 20, 0));
+                // Köke ekle
+                if (sahne.getRoot() instanceof Pane) {
+                    ((Pane) sahne.getRoot()).getChildren().add(katman);
+                } else {
+                    return;
+                }
+            }
+            final StackPane toastKatmani = katman;
+            toastKatmani.getChildren().add(popup);
+
+            // Belir → bekle → kaybol animasyonu
+            Timeline tl = new Timeline(
+                new KeyFrame(Duration.ZERO,
+                    new KeyValue(popup.opacityProperty(), 0.0)),
+                new KeyFrame(Duration.millis(250),
+                    new KeyValue(popup.opacityProperty(), 1.0)),
+                new KeyFrame(Duration.millis(2750),
+                    new KeyValue(popup.opacityProperty(), 1.0)),
+                new KeyFrame(Duration.millis(3200),
+                    new KeyValue(popup.opacityProperty(), 0.0))
+            );
+            tl.setOnFinished(e -> toastKatmani.getChildren().remove(popup));
+            tl.play();
+        });
     }
 }

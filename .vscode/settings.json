@@ -1,23 +1,23 @@
 {
-    "java.project.sourcePaths": [
-        "SRC"
-    ],
-    "java.project.outputPath": "bin",
+  "java.project.sourcePaths": [
+    "SRC"
+  ],
+  "java.project.outputPath": "bin",
 
-    "java.jdt.ls.java.home": "C:\\Users\\YUŞA\\Desktop\\java uygulama\\oracleJdk-25",
+  "java.jdt.ls.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.0.36-hotspot",
 
-    "java.configuration.runtimes": [
-        {
-            "name": "JavaSE-25",
-            "path": "C:\\Users\\YUŞA\\Desktop\\java uygulama\\oracleJdk-25",
-            "default": true
-        }
-    ],
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-25",
+      "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.0.36-hotspot",
+      "default": true
+    }
+  ],
 
-    "java.project.referencedLibraries": [
-        "C:\\Users\\YUŞA\\Downloads\\openjfx-25.0.3_windows-x64_bin-sdk\\javafx-sdk-25.0.3\\lib\\*.jar"
-    ],
+  "java.project.referencedLibraries": [
+    "C:\\Users\\tunce\\OneDrive\\Desktop\\javafx-sdk-26.0.1\\lib\\*.jar"
+  ],
 
-    "java.debug.settings.onBuildFailureProceed": true,
-    "java.compile.nullAnalysis.mode": "disabled"
+  "java.debug.settings.onBuildFailureProceed": true,
+  "java.compile.nullAnalysis.mode": "disabled"
 }

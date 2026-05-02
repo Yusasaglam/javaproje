@@ -35,6 +35,7 @@ public class Kullanici implements Serializable {
 
     public String getKullaniciAdi() { return kullaniciAdi; }
     public String getSifre() { return sifre; }
+    public void   setSifre(String sifre) { this.sifre = sifre; }
     public Rol getRol() { return rol; }
     public String getMusteriId() { return musteriId; }
     public int getBasarisizGirisSayisi() { return basarisizGirisSayisi; }

@@ -5,7 +5,9 @@
       "Read(//c/Program Files/**)",
       "Read(//c/Program Files/Microsoft//**)",
       "Bash(cmd //c \"where javac\")",
-      "Bash('/c/Users/YUŞA/AppData/Roaming/Code/User/workspaceStorage/863877a6819509aa345db399ddcef805/redhat.java/ss_ws/java uygulama_76e41ab5/bin/oracleJdk-25/bin/javac.exe' -version)"
+      "Bash('/c/Users/YUŞA/AppData/Roaming/Code/User/workspaceStorage/863877a6819509aa345db399ddcef805/redhat.java/ss_ws/java uygulama_76e41ab5/bin/oracleJdk-25/bin/javac.exe' -version)",
+      "Bash(javac -cp \"C:\\\\Users\\\\tunce\\\\OneDrive\\\\Desktop\\\\javafx-sdk-26.0.1\\\\lib\\\\*\" -sourcepath SRC -d bin SRC/Main.java)",
+      "Bash(javac --module-path C:/Users/tunce/OneDrive/Desktop/javafx-sdk-26.0.1/lib --add-modules javafx.controls,javafx.fxml -cp SRC -d bin 'SRC/model/*.java' 'SRC/persistence/*.java' 'SRC/service/*.java' 'SRC/ui/*.java' SRC/Main.java)"
     ]
   }
 }

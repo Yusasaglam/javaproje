@@ -1,0 +1,11 @@
+package service;
+
+public enum RiskOlayTuru {
+    SUPHELI_ISLEM,
+    YUKSEK_TUTAR,
+    GECE_MODU_ISLEM,
+    ANI_BAKIYE_DUSUSU,
+    COK_FAZLA_ISLEM,
+    HESAP_DONDURULDU,
+    SUPHELI_KALDIRILDI
+}

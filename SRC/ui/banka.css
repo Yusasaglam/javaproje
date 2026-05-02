@@ -1,103 +1,384 @@
-/* ── Genel ─────────────────────────────────────────────────────────────── */
-.root { -fx-font-family: "System"; -fx-font-size: 12px; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   TÜRK BANKASI — Global Stil Dosyası
+   Renk Paleti: Lacivert #163264 | Mavi #235299 | Yeşil #146418 | Kırmızı #af1414
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Butonlar ──────────────────────────────────────────────────────────── */
+/* ── Temel ──────────────────────────────────────────────────────────────── */
+.root {
+    -fx-font-family: "Segoe UI", "System", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-color: #f0f3f9;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BUTONLAR
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .buton-ana {
     -fx-background-color: #163264;
     -fx-text-fill: white;
     -fx-font-weight: bold;
-    -fx-background-radius: 6;
+    -fx-font-size: 13px;
+    -fx-background-radius: 7;
     -fx-cursor: hand;
-    -fx-padding: 8 18;
+    -fx-padding: 10 22;
+    -fx-effect: dropshadow(gaussian, rgba(22,50,100,0.30), 6, 0, 0, 2);
 }
-.buton-ana:hover   { -fx-background-color: #23529a; }
-.buton-ana:pressed { -fx-background-color: #0a1e46; }
+.buton-ana:hover {
+    -fx-background-color: #1e4690;
+    -fx-effect: dropshadow(gaussian, rgba(22,50,100,0.45), 10, 0, 0, 3);
+}
+.buton-ana:pressed {
+    -fx-background-color: #0d2050;
+    -fx-effect: none;
+}
 
 .buton-normal {
-    -fx-background-color: #e8edf5;
+    -fx-background-color: #e8edf7;
     -fx-text-fill: #163264;
-    -fx-background-radius: 4;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-background-radius: 6;
     -fx-cursor: hand;
-    -fx-padding: 6 12;
+    -fx-padding: 8 16;
+    -fx-border-color: #c6d2e4;
+    -fx-border-radius: 6;
+    -fx-border-width: 1;
 }
-.buton-normal:hover   { -fx-background-color: #d0daea; }
-.buton-normal:pressed { -fx-background-color: #b8cbde; }
+.buton-normal:hover {
+    -fx-background-color: #d4dff0;
+    -fx-border-color: #a0b4cc;
+}
+.buton-normal:pressed {
+    -fx-background-color: #bdd0e8;
+}
 
 .buton-tehlike {
     -fx-background-color: #af1414;
     -fx-text-fill: white;
-    -fx-background-radius: 4;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-background-radius: 6;
     -fx-cursor: hand;
-    -fx-padding: 6 12;
+    -fx-padding: 8 16;
 }
 .buton-tehlike:hover { -fx-background-color: #c71a1a; }
+.buton-tehlike:pressed { -fx-background-color: #8a0f0f; }
 
-/* ── Giriş alanları ────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   GİRİŞ ALANLARI  (TextField / PasswordField)
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .alan {
-    -fx-background-color: white;
+    -fx-background-color: #ffffff;
     -fx-border-color: #c6d2e4;
-    -fx-border-radius: 4;
-    -fx-background-radius: 4;
-    -fx-padding: 6 8;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-border-width: 2;
+    -fx-padding: 10 14;
+    -fx-font-size: 13px;
+    -fx-pref-height: 44px;
+    -fx-min-height: 44px;
+    -fx-text-fill: #1e2841;
+    -fx-prompt-text-fill: #aab4cc;
 }
 .alan:focused {
-    -fx-border-color: #64a0ff;
+    -fx-border-color: #163264;
+    -fx-border-width: 2;
+    -fx-background-color: #f7f9ff;
+    -fx-effect: dropshadow(gaussian, rgba(22,50,100,0.15), 6, 0, 0, 0);
+}
+.alan:hover {
+    -fx-border-color: #8aa4cc;
     -fx-border-width: 2;
 }
 
-/* ── Kart paneli ───────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   KART PANELİ
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .kart {
     -fx-background-color: white;
-    -fx-border-color: #c6d2e4;
-    -fx-border-radius: 6;
-    -fx-background-radius: 6;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 6, 0, 0, 2);
+    -fx-border-color: #dce6f2;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 12, 0, 0, 3);
 }
 
-/* ── Tablo ─────────────────────────────────────────────────────────────── */
-.table-view { -fx-border-color: #c6d2e4; -fx-background-color: white; }
-.table-view .column-header-background { -fx-background-color: #163264; }
+/* ══════════════════════════════════════════════════════════════════════════
+   TABLO
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.table-view {
+    -fx-border-color: #dce6f2;
+    -fx-border-radius: 8;
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);
+}
+.table-view .column-header-background {
+    -fx-background-color: #163264;
+    -fx-background-radius: 8 8 0 0;
+}
 .table-view .column-header,
-.table-view .filler { -fx-background-color: transparent; }
+.table-view .filler {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-size: 36;
+}
 .table-view .column-header .label {
     -fx-text-fill: white;
     -fx-font-weight: bold;
+    -fx-font-size: 12px;
     -fx-alignment: center-left;
+    -fx-padding: 0 8;
 }
-.table-view .table-row-cell { -fx-cell-size: 28; }
-.table-view .table-row-cell:odd  { -fx-background-color: #eef4ff; }
-.table-view .table-row-cell:even { -fx-background-color: white; }
-.table-view .table-row-cell:selected { -fx-background-color: #b4d2f5; }
-.table-view .table-row-cell:selected .text { -fx-fill: #163264; }
-.table-view .table-cell { -fx-padding: 0 8; }
+.table-view .table-row-cell {
+    -fx-cell-size: 34px;
+    -fx-border-color: transparent;
+}
+.table-view .table-row-cell:odd  { -fx-background-color: #f4f8ff; }
+.table-view .table-row-cell:even { -fx-background-color: #ffffff; }
+.table-view .table-row-cell:hover { -fx-background-color: #e4edfb; }
+.table-view .table-row-cell:selected {
+    -fx-background-color: #163264;
+}
+.table-view .table-row-cell:selected .text {
+    -fx-fill: white;
+}
+.table-view .table-cell {
+    -fx-padding: 0 10;
+    -fx-font-size: 12px;
+    -fx-text-fill: #1e2841;
+}
+.table-view .table-row-cell:selected .table-cell {
+    -fx-text-fill: white;
+}
 
-/* ── TabPane ───────────────────────────────────────────────────────────── */
-.tab-pane .tab-header-area .tab-header-background { -fx-background-color: #f0f3f9; }
-.tab-pane .tab { -fx-background-color: #e8edf5; -fx-padding: 6 14; }
-.tab-pane .tab:selected { -fx-background-color: white; }
-.tab-pane .tab .tab-label { -fx-font-weight: bold; -fx-text-fill: #163264; }
+/* Scrollbar tablo içinde */
+.table-view .scroll-bar:vertical .thumb { -fx-background-color: #b0c4de; -fx-background-radius: 4; }
+.table-view .scroll-bar:vertical .track { -fx-background-color: #f0f4f9; }
+.table-view .scroll-bar:horizontal .thumb { -fx-background-color: #b0c4de; -fx-background-radius: 4; }
 
-/* ── ScrollPane ────────────────────────────────────────────────────────── */
-.scroll-pane { -fx-background-color: transparent; }
-.scroll-pane > .viewport { -fx-background-color: transparent; }
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB PANE
+   ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── ComboBox ──────────────────────────────────────────────────────────── */
-.combo-box { -fx-background-color: white; -fx-border-color: #c6d2e4; -fx-border-radius: 4; }
+.tab-pane {
+    -fx-tab-min-height: 38px;
+}
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: #eaf0fa;
+    -fx-border-color: #d0dcea;
+    -fx-border-width: 0 0 1 0;
+}
+.tab-pane .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 8 18;
+    -fx-cursor: hand;
+}
+.tab-pane .tab:selected {
+    -fx-background-color: white;
+    -fx-border-color: #163264 transparent transparent transparent;
+    -fx-border-width: 3 0 0 0;
+}
+.tab-pane .tab .tab-label {
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-text-fill: #555e78;
+}
+.tab-pane .tab:selected .tab-label {
+    -fx-text-fill: #163264;
+}
+.tab-pane .tab:hover .tab-label {
+    -fx-text-fill: #163264;
+}
+.tab-pane > .tab-content-area {
+    -fx-background-color: #f0f3f9;
+    -fx-padding: 0;
+}
 
-/* ── DatePicker ────────────────────────────────────────────────────────── */
-.date-picker { -fx-background-color: white; -fx-border-color: #c6d2e4; -fx-border-radius: 4; }
+/* ══════════════════════════════════════════════════════════════════════════
+   SCROLL PANE
+   ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── İstat kartı ───────────────────────────────────────────────────────── */
-.istat-kart {
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+.scroll-bar:vertical .thumb {
+    -fx-background-color: #b8c8e0;
+    -fx-background-radius: 4;
+}
+.scroll-bar:vertical .track {
+    -fx-background-color: #e8eef8;
+}
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 4;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMBOBOX
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.combo-box {
     -fx-background-color: white;
     -fx-border-color: #c6d2e4;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 6, 0, 0, 2);
-    -fx-padding: 14 18;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-border-width: 2;
+    -fx-font-size: 13px;
+    -fx-padding: 2 4;
+    -fx-pref-height: 40px;
+    -fx-min-height: 40px;
+}
+.combo-box:focused {
+    -fx-border-color: #163264;
+    -fx-border-width: 2;
+}
+.combo-box:hover {
+    -fx-border-color: #8aa4cc;
+    -fx-border-width: 2;
+}
+.combo-box .list-cell {
+    -fx-padding: 6 10;
+    -fx-text-fill: #1e2841;
+}
+.combo-box-popup .list-view {
+    -fx-background-color: white;
+    -fx-border-color: #c6d2e4;
+    -fx-border-radius: 6;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 12, 0, 0, 4);
+}
+.combo-box-popup .list-view .list-cell:filled:hover {
+    -fx-background-color: #e4edfb;
+}
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: #163264;
+    -fx-text-fill: white;
 }
 
-/* ── Durum etiketleri ──────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   DATE PICKER
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.date-picker {
+    -fx-background-color: white;
+    -fx-border-color: #c6d2e4;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-border-width: 2;
+    -fx-pref-height: 40px;
+    -fx-min-height: 40px;
+}
+.date-picker:focused { -fx-border-color: #163264; -fx-border-width: 2; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   İSTATİSTİK KARTI
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.istat-kart {
+    -fx-background-color: white;
+    -fx-border-color: #dce6f2;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 3);
+    -fx-padding: 18 22;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DURUM ETİKETLERİ
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .durum-basarili { -fx-text-fill: #146418; -fx-font-weight: bold; }
 .durum-hata     { -fx-text-fill: #af1414; -fx-font-weight: bold; }
 .durum-uyari    { -fx-text-fill: #af4b00; -fx-font-weight: bold; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HEADER ŞERİDİ (MainFrame)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.header-serit {
+    -fx-background-color: linear-gradient(to right, #0d1f4a, #163264);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 8, 0, 0, 3);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   GİRİŞ EKRANI — Form Kartı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.giris-kart {
+    -fx-background-color: white;
+    -fx-background-radius: 18;
+    -fx-effect: dropshadow(gaussian, rgba(22,50,100,0.22), 36, 0, 0, 8);
+}
+
+.giris-alan {
+    -fx-background-color: #f3f6fb;
+    -fx-border-color: #d0dcea;
+    -fx-border-radius: 9;
+    -fx-background-radius: 9;
+    -fx-border-width: 2;
+    -fx-padding: 12 16;
+    -fx-font-size: 14px;
+    -fx-pref-height: 48px;
+    -fx-min-height: 48px;
+    -fx-text-fill: #1e2841;
+    -fx-prompt-text-fill: #a8b8d0;
+}
+.giris-alan:focused {
+    -fx-border-color: #2855aa;
+    -fx-border-width: 2;
+    -fx-background-color: #ffffff;
+}
+.giris-alan:hover {
+    -fx-border-color: #6a94d0;
+    -fx-border-width: 2;
+    -fx-background-color: #f8faff;
+}
+
+.giris-buton {
+    -fx-background-color: linear-gradient(to bottom right, #2855aa, #163264);
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-background-radius: 9;
+    -fx-cursor: hand;
+    -fx-padding: 13 0;
+    -fx-pref-height: 50px;
+    -fx-min-height: 50px;
+    -fx-effect: dropshadow(gaussian, rgba(22,50,100,0.40), 10, 0, 0, 4);
+}
+.giris-buton:hover {
+    -fx-background-color: linear-gradient(to bottom right, #3366cc, #2050a0);
+    -fx-effect: dropshadow(gaussian, rgba(22,50,100,0.55), 14, 0, 0, 5);
+}
+.giris-buton:pressed {
+    -fx-background-color: #0d2050;
+    -fx-effect: none;
+}
+
+/* Grafik arka planları */
+.chart {
+    -fx-background-color: white;
+    -fx-padding: 10;
+}
+.chart-plot-background { -fx-background-color: #f8faff; }
+.chart-vertical-grid-lines { -fx-stroke: #e4eaf4; }
+.chart-horizontal-grid-lines { -fx-stroke: #e4eaf4; }
+.default-color0.chart-bar { -fx-bar-fill: #163264; }
+.default-color1.chart-bar { -fx-bar-fill: #235299; }
+.default-color2.chart-bar { -fx-bar-fill: #2e6dbf; }
+.default-color3.chart-bar { -fx-bar-fill: #4a8fd4; }
+.default-color4.chart-bar { -fx-bar-fill: #6aaee8; }
+.axis { -fx-tick-label-fill: #555e78; -fx-font-size: 11; }
+
+/* Separator */
+.separator .line { -fx-border-color: #dce6f2; -fx-border-width: 0.8; }

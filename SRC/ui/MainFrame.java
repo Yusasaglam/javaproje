@@ -3,9 +3,12 @@ package ui;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
@@ -21,35 +24,128 @@ public class MainFrame {
         boolean yonetici = kullanici.getRol() == Kullanici.Rol.YONETICI;
 
         // ── Üst başlık şeridi ─────────────────────────────────────────────────
-        HBox header = new HBox(12);
+        HBox header = new HBox(0);
         header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(10, 20, 10, 20));
-        header.setStyle("-fx-background-color: #163264;");
+        header.setPrefHeight(56);
+        header.setMinHeight(56);
+        header.getStyleClass().add("header-serit");
+        header.setStyle("-fx-background-color: linear-gradient(to right, #080f2e, #163264);");
 
-        Label bankaLabel = new Label("🏦  TÜRK BANKASI");
-        bankaLabel.setFont(Font.font("System", FontWeight.BOLD, 15));
+        // Sol: logo + banka adı
+        HBox sol = new HBox(10);
+        sol.setAlignment(Pos.CENTER_LEFT);
+        sol.setPadding(new Insets(0, 0, 0, 20));
+
+        Label bankaIkon = new Label("🏦");
+        bankaIkon.setFont(Font.font("Segoe UI Emoji", 22));
+
+        Label bankaLabel = new Label("TÜRK BANKASI");
+        bankaLabel.setFont(Font.font("Segoe UI", FontWeight.EXTRA_BOLD, 15));
         bankaLabel.setTextFill(Color.WHITE);
+        bankaLabel.setStyle("-fx-letter-spacing: 1.5;");
 
+        // İnce sarı dikey ayraç
+        Rectangle ayrac = new Rectangle(2, 22);
+        ayrac.setFill(Color.web("#ffd532", 0.6));
+        HBox.setMargin(ayrac, new Insets(0, 6, 0, 14));
+
+        Label subBaslik = new Label("Bankacılık Yönetim Sistemi");
+        subBaslik.setFont(Font.font("Segoe UI", 11));
+        subBaslik.setTextFill(Color.web("#8eaed8"));
+
+        sol.getChildren().addAll(bankaIkon, bankaLabel, ayrac, subBaslik);
+
+        // Orta: spacer
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        // Sağ: kullanıcı bilgisi + çıkış
+        HBox sag = new HBox(12);
+        sag.setAlignment(Pos.CENTER_RIGHT);
+        sag.setPadding(new Insets(0, 20, 0, 0));
+
+        // Kullanıcı avatar dairesi
+        Circle avatar = new Circle(16);
+        avatar.setFill(Color.web(yonetici ? "#ffd532" : "#4caf50"));
+
+        Label avatarHarf = new Label(kullanici.getKullaniciAdi().substring(0, 1).toUpperCase());
+        avatarHarf.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+        avatarHarf.setTextFill(Color.web(yonetici ? "#163264" : "#0a3c0a"));
+
+        StackPane avatarPane = new StackPane(avatar, avatarHarf);
+
+        // Kullanıcı adı + rol
+        VBox kullaniciBilgi = new VBox(2);
+        kullaniciBilgi.setAlignment(Pos.CENTER_LEFT);
+
         Label kullaniciLabel = new Label(kullanici.getKullaniciAdi());
-        kullaniciLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        kullaniciLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
         kullaniciLabel.setTextFill(Color.WHITE);
 
-        Label rolLabel = new Label(yonetici ? " YÖNETİCİ " : " MÜŞTERİ ");
-        rolLabel.setFont(Font.font("System", FontWeight.BOLD, 10));
-        rolLabel.setStyle(yonetici
-            ? "-fx-background-color: #ffd500; -fx-text-fill: #163264; -fx-background-radius: 3; -fx-padding: 3 8;"
-            : "-fx-background-color: #8ce68c; -fx-text-fill: #0a3c0a; -fx-background-radius: 3; -fx-padding: 3 8;");
+        Label rolLabel = new Label(yonetici ? "Yönetici" : "Müşteri");
+        rolLabel.setFont(Font.font("Segoe UI", 10));
+        rolLabel.setTextFill(Color.web(yonetici ? "#ffd532" : "#8ce68c"));
 
-        javafx.scene.control.Button cikisBtn = UITema.normalButon("Çıkış Yap");
+        kullaniciBilgi.getChildren().addAll(kullaniciLabel, rolLabel);
+
+        // İnce ayraç
+        Rectangle ayrac2 = new Rectangle(1, 28);
+        ayrac2.setFill(Color.web("#ffffff", 0.15));
+
+        // Çıkış butonu
+        Button cikisBtn = new Button("⏻  Çıkış");
+        cikisBtn.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.10);" +
+            "-fx-text-fill: #c8d8f0;" +
+            "-fx-font-size: 12px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 6;" +
+            "-fx-cursor: hand;" +
+            "-fx-padding: 7 14;" +
+            "-fx-border-color: rgba(255,255,255,0.18);" +
+            "-fx-border-radius: 6;" +
+            "-fx-border-width: 1;"
+        );
+        cikisBtn.setOnMouseEntered(e -> cikisBtn.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.18);" +
+            "-fx-text-fill: white;" +
+            "-fx-font-size: 12px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 6;" +
+            "-fx-cursor: hand;" +
+            "-fx-padding: 7 14;" +
+            "-fx-border-color: rgba(255,255,255,0.35);" +
+            "-fx-border-radius: 6;" +
+            "-fx-border-width: 1;"
+        ));
+        cikisBtn.setOnMouseExited(e -> cikisBtn.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.10);" +
+            "-fx-text-fill: #c8d8f0;" +
+            "-fx-font-size: 12px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 6;" +
+            "-fx-cursor: hand;" +
+            "-fx-padding: 7 14;" +
+            "-fx-border-color: rgba(255,255,255,0.18);" +
+            "-fx-border-radius: 6;" +
+            "-fx-border-width: 1;"
+        ));
         cikisBtn.setOnAction(e -> {
             stage.close();
             new GirisEkrani(stage);
         });
 
-        header.getChildren().addAll(bankaLabel, spacer, kullaniciLabel, rolLabel, cikisBtn);
+        sag.getChildren().addAll(avatarPane, kullaniciBilgi, ayrac2, cikisBtn);
+        header.getChildren().addAll(sol, spacer, sag);
+
+        // ── İnce alt çizgi ────────────────────────────────────────────────────
+        Rectangle headerCizgi = new Rectangle();
+        headerCizgi.setHeight(2);
+        headerCizgi.setFill(Color.web("#ffd532", 0.35));
+
+        VBox topBar = new VBox(0, header, headerCizgi);
+        // Genişliği topBar'a bağla — bağlamadan width=0 olurdu
+        headerCizgi.widthProperty().bind(topBar.widthProperty());
 
         // ── İçerik ────────────────────────────────────────────────────────────
         Region icerik = yonetici
@@ -57,17 +153,18 @@ public class MainFrame {
                 : new MusteriPaneli(kullanici, kontrolcu);
 
         BorderPane kok = new BorderPane();
-        kok.setTop(header);
+        kok.setTop(topBar);
         kok.setCenter(icerik);
         kok.setStyle("-fx-background-color: #f0f3f9;");
 
-        Scene scene = new Scene(kok, 1100, 760);
+        Scene scene = new Scene(kok, 1150, 780);
         scene.getStylesheets().add(UITema.CSS_YOLU);
 
-        stage.setTitle("Türk Bankası – " + kullanici.getKullaniciAdi());
+        stage.setTitle("Türk Bankası  –  " + kullanici.getKullaniciAdi()
+                + "  [" + (yonetici ? "YÖNETİCİ" : "MÜŞTERİ") + "]");
         stage.setScene(scene);
-        stage.setMinWidth(900);
-        stage.setMinHeight(640);
+        stage.setMinWidth(920);
+        stage.setMinHeight(660);
         stage.setResizable(true);
         stage.show();
     }

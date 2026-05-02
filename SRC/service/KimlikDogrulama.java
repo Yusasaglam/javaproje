@@ -20,7 +20,9 @@ public class KimlikDogrulama {
     }
 
     private void varsayilanKullanicilariYukle() {
-        kullanicilar.put("admin", new Kullanici("admin", "admin123", Kullanici.Rol.YONETICI, null));
+        // Admin şifresi SHA-256 ile hash'lenerek saklanır
+        String hashliSifre = HashUtil.sha256("admin123");
+        kullanicilar.put("admin", new Kullanici("admin", hashliSifre, Kullanici.Rol.YONETICI, null));
     }
 
     public Kullanici girisYap(String kullaniciAdi, String sifre) {
@@ -37,7 +39,21 @@ public class KimlikDogrulama {
             kaydedici.kaydet("GIRIS_PASIF_HESAP: " + kullaniciAdi);
             return null;
         }
-        if (!kullanici.getSifre().equals(sifre)) {
+
+        // Otomatik geçiş: düz metin şifre ise hash'e çevir
+        String storedSifre = kullanici.getSifre();
+        boolean eslesme;
+        if (HashUtil.hashMi(storedSifre)) {
+            eslesme = storedSifre.equals(HashUtil.sha256(sifre));
+        } else {
+            eslesme = storedSifre.equals(sifre);
+            if (eslesme) {
+                kullanici.setSifre(HashUtil.sha256(sifre));
+                kaydedici.kaydet("SIFRE_HASHLE_GUNCELLENDI: " + kullaniciAdi);
+            }
+        }
+
+        if (!eslesme) {
             kullanici.basarisizGirisArtir();
             kaydedici.kaydet("GIRIS_BASARISIZ: " + kullaniciAdi
                     + " (" + kullanici.getBasarisizGirisSayisi() + ". deneme)");
@@ -52,7 +68,12 @@ public class KimlikDogrulama {
         return kullanici;
     }
 
+    /** Yeni kullanıcı ekler — şifre otomatik olarak SHA-256 ile hash'lenir. */
     public void kullaniciEkle(Kullanici kullanici) {
+        // Düz metin şifre geldiyse hash'le
+        if (!HashUtil.hashMi(kullanici.getSifre())) {
+            kullanici.setSifre(HashUtil.sha256(kullanici.getSifre()));
+        }
         kullanicilar.put(kullanici.getKullaniciAdi(), kullanici);
         kaydedici.kaydet("KULLANICI_OLUSTURULDU: " + kullanici.getKullaniciAdi()
                 + " ROL=" + kullanici.getRol());
@@ -79,5 +100,31 @@ public class KimlikDogrulama {
 
     public Map<String, Kullanici> getKullanicilar() {
         return kullanicilar;
+    }
+
+    /** Admin şifre sıfırlama — eski şifre doğrulaması YOK. */
+    public boolean sifreSifirla(String kullaniciAdi, String yeniSifre) {
+        Kullanici k = kullanicilar.get(kullaniciAdi);
+        if (k == null) return false;
+        k.setSifre(HashUtil.sha256(yeniSifre));
+        kaydedici.kaydet("SIFRE_SIFIRLANDI: " + kullaniciAdi);
+        return true;
+    }
+
+    /**
+     * Mevcut şifreyi doğrulayıp yeni şifreyi SHA-256 olarak kaydeder.
+     * @return true → başarılı, false → mevcut şifre hatalı veya kullanıcı yok
+     */
+    public boolean sifreDegistir(String kullaniciAdi, String eskiSifre, String yeniSifre) {
+        Kullanici k = kullanicilar.get(kullaniciAdi);
+        if (k == null) return false;
+        String sakli = k.getSifre();
+        boolean dogru = HashUtil.hashMi(sakli)
+            ? sakli.equals(HashUtil.sha256(eskiSifre))
+            : sakli.equals(eskiSifre);
+        if (!dogru) return false;
+        k.setSifre(HashUtil.sha256(yeniSifre));
+        kaydedici.kaydet("SIFRE_DEGISTIRILDI: " + kullaniciAdi);
+        return true;
     }
 }
