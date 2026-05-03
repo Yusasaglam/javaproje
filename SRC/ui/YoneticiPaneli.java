@@ -18,8 +18,12 @@ import service.KimlikDogrulama;
 import service.RiskDinleyici;
 import service.RiskOlayi;
 
-import java.util.Optional;
+import service.ActivityLog;
+import service.AktiviteLogServisi;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 
@@ -58,6 +62,17 @@ public class YoneticiPaneli extends BorderPane {
     private Button sonuclarBtn;
     private java.util.List<String> botSimLoglar;
 
+    // Müşteri İzleme sekmesi
+    private TableView<ObservableList<String>> izlemeMusteriTablo;
+    private TableView<ObservableList<String>> izlemeLogTablo;
+    private TextField    izlemeAramaField;
+    private ComboBox<String> izlemeRiskFiltre;
+    private ComboBox<String> izlemeIslemFiltre;
+    private CheckBox     izlemeSadeceDonuk;
+    private VBox         izlemeDetayKutusu;
+    private String       izlemeSeciliMusteriId;
+    private DatePicker   izlemeBasTarih, izlemeBitisTarih;
+
     // Risk & Limitler sekmesi
     private ComboBox<String> limitHesapCombo;
     private TextField limitGunlukCekimField, limitGunlukTransferField;
@@ -94,12 +109,14 @@ public class YoneticiPaneli extends BorderPane {
         Tab t4 = new Tab("  Kullanıcı Yönetimi  ", kullaniciSekme());
         Tab t5 = new Tab("  Raporlar  ",            raporlarSekme());
         Tab t6 = new Tab("  Risk & Limitler  ",     riskLimitlerSekme());
+        Tab t7 = new Tab("  Müşteri İzleme  ",      musteriIzlemeSekme());
 
-        sekmeler.getTabs().addAll(t1, t2, t3, t4, t5, t6);
+        sekmeler.getTabs().addAll(t1, t2, t3, t4, t5, t6, t7);
 
         sekmeler.getSelectionModel().selectedItemProperty().addListener((obs, eski, yeni) -> {
             if (yeni == t5) raporlariYenile();
             if (yeni == t6) { hesapComboGuncelle(limitHesapCombo); limitlariYenile(); riskTablosunuYenile(); }
+            if (yeni == t7) izlemeMusteriListesiniYenile();
         });
 
         setCenter(sekmeler);
@@ -1003,7 +1020,9 @@ public class YoneticiPaneli extends BorderPane {
         sonuclarBtn.setDisable(true);
         botSimLoglar = null;
 
+        kontrolcu.durumKaydet("banka_bot_oncesi.dat");
         kontrolcu.getKaydedici().setSessiz(true);
+        kontrolcu.botModuBaslat();
         new Thread(() -> {
             java.util.Random rand = new java.util.Random(42L);
             java.util.List<Account> liste = new java.util.ArrayList<>(hesaplar);
@@ -1027,7 +1046,9 @@ public class YoneticiPaneli extends BorderPane {
 
             L.add("HEADER:BOT SİMÜLASYONU — RİSK SEVİYELERİ YOLCULUĞU (30 İŞLEM)");
             L.add("INFO:Test Hesabı  :  " + testH.getHesapId() + " — " + testAd + "  │  Limit: 500,000 ₺/gün  │  Başlangıç bakiyesi: 300,000+ ₺");
-            L.add("INFO:Risk Puanları:  Büyük işlem (≥50K) → +20   Gece modu (≥10K) → +15   Ani düşüş (≥%95) → +15   Velocity (≥10/5dk) → +30");
+            double riskEsigi = kontrolcu.getYuksekRiskEsigi();
+            String riskEsigiStr = String.format(Locale.US, "%,.0f", riskEsigi);
+            L.add("INFO:Risk Puanları:  Büyük işlem (≥" + riskEsigiStr + " ₺) → +20   Gece modu (≥10K) → +15   Ani düşüş (≥%95,min 5K) → +15   Velocity (≥10/5dk, tüm hesaplar) → +30");
             L.add("INFO:Risk Eşikleri:  🟡 İZLENİYOR ≥31   🟠 RİSKLİ ≥61   🔴 ŞÜPHELİ/DONDURULDU ≥86");
             L.add("INFO:");
 
@@ -1054,7 +1075,7 @@ public class YoneticiPaneli extends BorderPane {
                     L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
                         + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                         + " → " + String.format(Locale.US, "%,.0f ₺", testH.getBakiye()));
-                    L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi — tutar 50,000 ₺ eşiğinin çok altında");
+                    L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi — tutar " + riskEsigiStr + " ₺ eşiğinin çok altında");
                     L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter + "   " + riskSeviyeEmoji(sAfter));
                 } catch (Exception e) {
                     basarisiz++;
@@ -1104,17 +1125,17 @@ public class YoneticiPaneli extends BorderPane {
                         + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                         + " → " + String.format(Locale.US, "%,.0f ₺", testH.getBakiye()));
                     boolean anyRisk = false;
-                    if (m >= 50_000) {
-                        L.add("TXNRISK:  ⚡  Büyük tutarlı işlem  (" + String.format(Locale.US, "%,.0f", m) + " ₺  ≥  50,000 ₺ eşiği)  →  +20 puan");
+                    if (m >= riskEsigi) {
+                        L.add("TXNRISK:  ⚡  Büyük tutarlı işlem  (" + String.format(Locale.US, "%,.0f", m) + " ₺  ≥  " + riskEsigiStr + " ₺ eşiği)  →  +20 puan");
                         anyRisk = true;
                     }
-                    if ("ÇEKİM".equals(tip) && bOnce > 0 && m / bOnce >= 0.95) {
+                    if ("ÇEKİM".equals(tip) && bOnce > 0 && m >= 5_000 && m / bOnce >= 0.95) {
                         L.add("TXNRISK:  ⚡  Ani bakiye düşüşü — bakiyenin %95'inden fazlası tek seferde çekildi  →  +15 puan");
                         anyRisk = true;
                     }
-                    if (kontrolcu.kisaVadeliCokIslemMi(testH.getHesapId())) {
-                        long kSayi = kontrolcu.kisaVadeliIslemSayisi(testH.getHesapId());
-                        L.add("TXNRISK:  ⚡  Velocity uyarısı!  Son 5 dakikada " + kSayi + " işlem yapıldı  (eşik: ≥10)  →  +30 puan");
+                    if (kontrolcu.kisaVadeliCokIslemMiMusteri(testH.getSahibiId())) {
+                        long kSayi = kontrolcu.kisaVadeliMusteriIslemSayisi(testH.getSahibiId());
+                        L.add("TXNRISK:  ⚡  Velocity uyarısı!  Son 5 dakikada tüm hesaplarda " + kSayi + " işlem yapıldı  (eşik: ≥10)  →  +30 puan");
                         anyRisk = true;
                     }
                     if (dondu) {
@@ -1195,12 +1216,12 @@ public class YoneticiPaneli extends BorderPane {
                         L.add("TXNRISK:  🌙  Gece saati yüksek tutarlı işlem  (01:00-06:00, tutar " + String.format(Locale.US, "%,.0f", m) + " ₺  ≥  10,000 ₺)  →  +15 puan");
                         anyRisk = true;
                     }
-                    if (m >= 50_000) {
-                        L.add("TXNRISK:  ⚡  Aynı zamanda büyük tutarlı işlem (≥50,000 ₺)  →  +20 puan ek");
+                    if (m >= riskEsigi) {
+                        L.add("TXNRISK:  ⚡  Aynı zamanda büyük tutarlı işlem (≥" + riskEsigiStr + " ₺)  →  +20 puan ek");
                         anyRisk = true;
                     }
-                    if (kontrolcu.kisaVadeliCokIslemMi(gh.getHesapId())) {
-                        L.add("TXNRISK:  ⚡  Velocity: Son 5 dk'da " + kontrolcu.kisaVadeliIslemSayisi(gh.getHesapId()) + " işlem (eşik ≥10)  →  +30 puan");
+                    if (kontrolcu.kisaVadeliCokIslemMiMusteri(gh.getSahibiId())) {
+                        L.add("TXNRISK:  ⚡  Velocity: Son 5 dk'da " + kontrolcu.kisaVadeliMusteriIslemSayisi(gh.getSahibiId()) + " işlem (tüm hesaplar, eşik ≥10)  →  +30 puan");
                         anyRisk = true;
                     }
                     if (dondu) L.add("TXNRISK:  🔴  Skor eşiği aşıldı (≥86)  →  Hesap otomatik donduruldu!");
@@ -1266,9 +1287,9 @@ public class YoneticiPaneli extends BorderPane {
                         + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                         + " → " + String.format(Locale.US, "%,.0f ₺", h.getBakiye()));
                     boolean anyRisk = false;
-                    if (m >= 50_000) { L.add("TXNRISK:  ⚡  Büyük tutarlı işlem (≥50,000 ₺)  →  +20 puan"); anyRisk = true; }
-                    if (kontrolcu.kisaVadeliCokIslemMi(h.getHesapId())) {
-                        L.add("TXNRISK:  ⚡  Velocity: " + kontrolcu.kisaVadeliIslemSayisi(h.getHesapId()) + " işlem/5 dk  →  +30 puan");
+                    if (m >= riskEsigi) { L.add("TXNRISK:  ⚡  Büyük tutarlı işlem (≥" + riskEsigiStr + " ₺)  →  +20 puan"); anyRisk = true; }
+                    if (kontrolcu.kisaVadeliCokIslemMiMusteri(h.getSahibiId())) {
+                        L.add("TXNRISK:  ⚡  Velocity: " + kontrolcu.kisaVadeliMusteriIslemSayisi(h.getSahibiId()) + " işlem/5 dk (tüm hesaplar)  →  +30 puan");
                         anyRisk = true;
                     }
                     if (!anyRisk && !dondu) L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi");
@@ -1302,7 +1323,10 @@ public class YoneticiPaneli extends BorderPane {
             final java.util.List<String> sonLoglar = L;
             final int fb = basarili, fsz = basarisiz;
             Platform.runLater(() -> {
+                kontrolcu.botModuBitir();
                 kontrolcu.getKaydedici().setSessiz(false);
+                kontrolcu.durumYukle("banka_bot_oncesi.dat");
+                new java.io.File("banka_bot_oncesi.dat").delete();
                 raporlariYenile(); hesaplariYenile(); riskTablosunuYenile();
                 botSimLoglar = sonLoglar;
                 sonuclarBtn.setDisable(false);
@@ -1547,5 +1571,306 @@ public class YoneticiPaneli extends BorderPane {
             kart.getChildren().add(btnRow);
         }
         return kart;
+    }
+
+    // ── Müşteri İzleme Sekmesi ────────────────────────────────────────────────
+
+    private javafx.scene.Node musteriIzlemeSekme() {
+        VBox solPanel = new VBox(8);
+        solPanel.setPadding(new Insets(10));
+        solPanel.setStyle("-fx-background-color: #f0f3f9;");
+        solPanel.setMinWidth(270);
+
+        izlemeAramaField = UITema.alan();
+        izlemeAramaField.setPromptText("İsim, ID veya e-posta ara...");
+
+        izlemeRiskFiltre = new ComboBox<>();
+        izlemeRiskFiltre.getItems().addAll("Tüm Seviyeler", "GÜVENLİ", "İZLENİYOR", "RİSKLİ", "DONDURULDU");
+        izlemeRiskFiltre.setValue("Tüm Seviyeler");
+        izlemeRiskFiltre.setMaxWidth(Double.MAX_VALUE);
+
+        izlemeSadeceDonuk = new CheckBox("Sadece donuk hesaplı müşteriler");
+
+        izlemeMusteriTablo = new TableView<>();
+        izlemeMusteriTablo.setPlaceholder(new Label("Müşteri bulunamadı"));
+        izlemeMusteriTablo.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        VBox.setVgrow(izlemeMusteriTablo, Priority.ALWAYS);
+
+        TableColumn<ObservableList<String>, String> colAd     = new TableColumn<>("Ad Soyad");
+        TableColumn<ObservableList<String>, String> colId     = new TableColumn<>("ID");
+        TableColumn<ObservableList<String>, String> colSkor   = new TableColumn<>("Risk");
+        TableColumn<ObservableList<String>, String> colSeviye = new TableColumn<>("Seviye");
+        colAd    .setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().size() > 0 ? d.getValue().get(0) : ""));
+        colId    .setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().size() > 1 ? d.getValue().get(1) : ""));
+        colSkor  .setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().size() > 2 ? d.getValue().get(2) : ""));
+        colSeviye.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().size() > 3 ? d.getValue().get(3) : ""));
+        colSeviye.setCellFactory(col -> new TableCell<>() {
+            @Override protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) { setText(null); setStyle(""); return; }
+                setText(item);
+                setStyle("-fx-font-weight:bold;-fx-text-fill:" + riskSeviyesiRengi(item) + ";");
+            }
+        });
+        colSkor.setMaxWidth(52); colSkor.setMinWidth(45);
+        colId  .setMaxWidth(82); colId  .setMinWidth(72);
+        izlemeMusteriTablo.getColumns().addAll(colAd, colId, colSkor, colSeviye);
+
+        solPanel_statsLabel = UITema.bilgiLabel("Yükleniyor...");
+
+        solPanel.getChildren().addAll(
+                UITema.baslikLabel("Gerçek Müşteri Listesi"),
+                izlemeAramaField, izlemeRiskFiltre, izlemeSadeceDonuk,
+                izlemeMusteriTablo, solPanel_statsLabel);
+
+        // ── Sağ panel ────────────────────────────────────────────────────
+        izlemeDetayKutusu = new VBox(10);
+        izlemeDetayKutusu.setPadding(new Insets(12));
+        izlemeDetayKutusu.setStyle("-fx-background-color: #f0f3f9;");
+        Label beklemeLabel = new Label("← Soldan bir müşteri seçin");
+        beklemeLabel.setStyle("-fx-text-fill: #8895aa; -fx-font-size: 13;");
+        beklemeLabel.setPadding(new Insets(30));
+        izlemeDetayKutusu.getChildren().add(beklemeLabel);
+
+        ScrollPane sagScroll = new ScrollPane(izlemeDetayKutusu);
+        sagScroll.setFitToWidth(true);
+        sagScroll.setStyle("-fx-background-color: #f0f3f9;");
+
+        // Dinleyiciler
+        izlemeAramaField.textProperty().addListener((o, e, n) -> izlemeMusteriListesiniYenile());
+        izlemeRiskFiltre.valueProperty().addListener((o, e, n) -> izlemeMusteriListesiniYenile());
+        izlemeSadeceDonuk.selectedProperty().addListener((o, e, n) -> izlemeMusteriListesiniYenile());
+        izlemeMusteriTablo.getSelectionModel().selectedItemProperty().addListener((obs, eski, yeni) -> {
+            if (yeni != null && yeni.size() > 1) {
+                izlemeSeciliMusteriId = yeni.get(1);
+                izlemeDetayGoster(izlemeSeciliMusteriId);
+            }
+        });
+
+        SplitPane split = new SplitPane(solPanel, sagScroll);
+        split.setDividerPositions(0.30);
+        return split;
+    }
+
+    private void izlemeMusteriListesiniYenile() {
+        if (izlemeMusteriTablo == null) return;
+        String ara  = izlemeAramaField.getText() == null ? "" : izlemeAramaField.getText().trim().toLowerCase();
+        String risk = izlemeRiskFiltre.getValue();
+        boolean donukFiltre = izlemeSadeceDonuk.isSelected();
+
+        izlemeMusteriTablo.getItems().clear();
+        int toplam = 0, donukSayac = 0;
+
+        for (model.Customer m : kontrolcu.tumMusteriler()) {
+            if (kontrolcu.isDemoMusteri(m.getMusteriId())) continue;
+            if (!ara.isEmpty() && !m.getAd().toLowerCase().contains(ara)
+                    && !m.getMusteriId().toLowerCase().contains(ara)
+                    && !m.getEposta().toLowerCase().contains(ara)) continue;
+
+            List<model.Account> hs = kontrolcu.musteriHesaplari(m.getMusteriId());
+            int maxSkor = hs.stream().mapToInt(h -> kontrolcu.getRiskSkoru(h.getHesapId())).max().orElse(0);
+            String seviye = riskSeviyesiMetni(maxSkor);
+            boolean hesapDonuk = hs.stream().anyMatch(h -> kontrolcu.suphelihMi(h.getHesapId()));
+
+            if (donukFiltre && !hesapDonuk) continue;
+            if (!"Tüm Seviyeler".equals(risk) && !seviye.equals(risk)) continue;
+
+            izlemeMusteriTablo.getItems().add(FXCollections.observableArrayList(
+                    m.getAd(), m.getMusteriId(), String.valueOf(maxSkor), seviye));
+            toplam++;
+            if (hesapDonuk) donukSayac++;
+        }
+        // stats
+        if (solPanel_statsLabel != null)
+            solPanel_statsLabel.setText("Toplam: " + toplam + "  |  Donuk hesaplı: " + donukSayac);
+    }
+
+    // stats label referansı için küçük bir çözüm
+    private Label solPanel_statsLabel;
+
+    private void izlemeDetayGoster(String musteriId) {
+        model.Customer m = kontrolcu.getMusteri(musteriId);
+        if (m == null) return;
+        List<model.Account> hesaplar = kontrolcu.musteriHesaplari(musteriId);
+        List<ActivityLog> hamLoglar = kontrolcu.getLogServisi().musteriyeGore(musteriId, true);
+
+        izlemeDetayKutusu.getChildren().clear();
+
+        // ── Profil kartı ─────────────────────────────────────────────────
+        int maxSkor = hesaplar.stream().mapToInt(h -> kontrolcu.getRiskSkoru(h.getHesapId())).max().orElse(0);
+        String seviye = riskSeviyesiMetni(maxSkor);
+        boolean donukMu = hesaplar.stream().anyMatch(h -> kontrolcu.suphelihMi(h.getHesapId()));
+
+        VBox profilKarti = UITema.kart("Müşteri Profili");
+        GridPane grid = new GridPane(); grid.setHgap(12); grid.setVgap(6);
+        grid.add(UITema.etiket("Ad Soyad:"),   0, 0); grid.add(new Label(m.getAd()), 1, 0);
+        grid.add(UITema.etiket("Müşteri ID:"), 0, 1); grid.add(new Label(m.getMusteriId()), 1, 1);
+        grid.add(UITema.etiket("E-posta:"),    0, 2); grid.add(new Label(m.getEposta()), 1, 2);
+        Label skorLabel = new Label(maxSkor + " / 100");
+        skorLabel.setStyle("-fx-font-weight:bold;-fx-font-size:14;-fx-text-fill:" + riskSeviyesiRengi(seviye) + ";");
+        Label seviyeBadge = new Label("  " + seviye + "  ");
+        seviyeBadge.setStyle("-fx-background-color:" + riskSeviyesiRengi(seviye)
+                + ";-fx-text-fill:white;-fx-font-weight:bold;-fx-background-radius:4;-fx-font-size:10;");
+        HBox skorSatir = new HBox(8, skorLabel, seviyeBadge);
+        skorSatir.setAlignment(Pos.CENTER_LEFT);
+        grid.add(UITema.etiket("Risk Skoru:"), 0, 3); grid.add(skorSatir, 1, 3);
+        if (donukMu) {
+            Label donukBadge = new Label("  DONDURULMUŞ HESAP VAR  ");
+            donukBadge.setStyle("-fx-background-color:#af1414;-fx-text-fill:white;"
+                    + "-fx-font-weight:bold;-fx-background-radius:4;-fx-font-size:10;");
+            grid.add(donukBadge, 1, 4);
+        }
+        profilKarti.getChildren().add(grid);
+
+        // ── Hesap kartı ───────────────────────────────────────────────────
+        VBox hesapKarti = UITema.kart("Hesaplar (" + hesaplar.size() + ")");
+        for (model.Account h : hesaplar) {
+            int hSkor  = kontrolcu.getRiskSkoru(h.getHesapId());
+            boolean hD = kontrolcu.suphelihMi(h.getHesapId());
+            String renk = hD ? "#af1414" : riskSeviyesiRengi(riskSeviyesiMetni(hSkor));
+            Label hl = new Label(h.getHesapId() + "  [" + h.getHesapTuru() + "]"
+                    + "  Bakiye: " + tl(h.getBakiye())
+                    + "  Risk: " + hSkor + (hD ? "  🔒 DONUK" : ""));
+            hl.setStyle("-fx-text-fill:" + renk + ";-fx-font-size:12;");
+            hesapKarti.getChildren().add(hl);
+        }
+
+        // ── Filtre çubuğu ─────────────────────────────────────────────────
+        VBox filtrePaneli = UITema.kart("Filtrele");
+        izlemeIslemFiltre = new ComboBox<>();
+        izlemeIslemFiltre.getItems().add("Tüm İşlemler");
+        for (ActivityLog.IslemTipi tip : ActivityLog.IslemTipi.values())
+            izlemeIslemFiltre.getItems().add(islemTipiAdi(tip));
+        izlemeIslemFiltre.setValue("Tüm İşlemler");
+        izlemeBasTarih   = new DatePicker(LocalDate.now().minusMonths(1));
+        izlemeBitisTarih = new DatePicker(LocalDate.now());
+        Button filtreBtn = UITema.normalButon("Uygula");
+        filtreBtn.setOnAction(e -> izlemeLogTablosunuDoldur(hamLoglar));
+        HBox filtreRow = new HBox(8, new Label("İşlem:"), izlemeIslemFiltre,
+                new Label("Tarih:"), izlemeBasTarih, new Label("–"), izlemeBitisTarih, filtreBtn);
+        filtreRow.setAlignment(Pos.CENTER_LEFT);
+        filtrePaneli.getChildren().add(filtreRow);
+
+        // ── Log tablosu ───────────────────────────────────────────────────
+        VBox logKarti = UITema.kart("Aktivite Geçmişi — sadece gerçek işlemler (" + hamLoglar.size() + " kayıt)");
+        izlemeLogTablo = new TableView<>();
+        izlemeLogTablo.setPlaceholder(new Label("Kayıt bulunamadı"));
+        izlemeLogTablo.setPrefHeight(340);
+
+        TableColumn<ObservableList<String>, String> cTarih     = izSutun("Tarih/Saat",       0, 132);
+        TableColumn<ObservableList<String>, String> cIslem     = izSutun("İşlem",             1, 120);
+        TableColumn<ObservableList<String>, String> cHesap     = izSutun("Hesap",             2,  88);
+        TableColumn<ObservableList<String>, String> cTutar     = izSutun("Tutar",             3, 105);
+        TableColumn<ObservableList<String>, String> cOnce      = izSutun("Risk Önce→Sonra",   4, 115);
+        TableColumn<ObservableList<String>, String> cDelta     = izSutun("Δ",                 5,  48);
+        TableColumn<ObservableList<String>, String> cKural     = izSutun("Tetiklenen Kural",  6, 155);
+        TableColumn<ObservableList<String>, String> cKaynak    = izSutun("Kaynak",            7,  65);
+
+        cDelta.setCellFactory(col -> new TableCell<>() {
+            @Override protected void updateItem(String v, boolean empty) {
+                super.updateItem(v, empty); if (empty || v == null) { setText(null); setStyle(""); return; }
+                setText(v);
+                setStyle(v.startsWith("+") && !"+0".equals(v)
+                    ? "-fx-font-weight:bold;-fx-text-fill:#af1414;"
+                    : v.startsWith("-") ? "-fx-font-weight:bold;-fx-text-fill:#146418;"
+                    : "-fx-text-fill:#646e82;");
+            }
+        });
+        cKaynak.setCellFactory(col -> new TableCell<>() {
+            @Override protected void updateItem(String v, boolean empty) {
+                super.updateItem(v, empty); if (empty || v == null) { setText(null); setStyle(""); return; }
+                setText(v);
+                setStyle("GERÇEK".equals(v) ? "-fx-font-weight:bold;-fx-text-fill:#146418;" : "-fx-text-fill:#8895aa;");
+            }
+        });
+        izlemeLogTablo.getColumns().addAll(cTarih, cIslem, cHesap, cTutar, cOnce, cDelta, cKural, cKaynak);
+        izlemeLogTablo.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
+        logKarti.getChildren().add(izlemeLogTablo);
+
+        izlemeDetayKutusu.getChildren().addAll(profilKarti, hesapKarti, filtrePaneli, logKarti);
+        izlemeLogTablosunuDoldur(hamLoglar);
+    }
+
+    private void izlemeLogTablosunuDoldur(List<ActivityLog> hamLoglar) {
+        if (izlemeLogTablo == null) return;
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd MMM HH:mm:ss",
+                new java.util.Locale("tr", "TR"));
+
+        String secilenIslem = izlemeIslemFiltre != null ? izlemeIslemFiltre.getValue() : "Tüm İşlemler";
+        LocalDate bas   = izlemeBasTarih   != null ? izlemeBasTarih.getValue()   : LocalDate.now().minusMonths(1);
+        LocalDate bitis = izlemeBitisTarih != null ? izlemeBitisTarih.getValue() : LocalDate.now();
+
+        AktiviteLogServisi srv = kontrolcu.getLogServisi();
+        List<ActivityLog> filtreli = srv.tarihFiltrele(hamLoglar, bas, bitis);
+        if (!"Tüm İşlemler".equals(secilenIslem))
+            filtreli = srv.islemTipiFiltrele(filtreli, islemTipiEnum(secilenIslem));
+
+        izlemeLogTablo.getItems().clear();
+        for (ActivityLog log : filtreli) {
+            String delta  = (log.riskDelta >= 0 ? "+" : "") + log.riskDelta;
+            String tutar  = log.miktar > 0 ? tl(log.miktar) : "—";
+            String hesap  = log.hesapId != null ? log.hesapId : "—";
+            String kaynak = log.kaynak == ActivityLog.Kaynak.GERCEK ? "GERÇEK" : "DEMO";
+            izlemeLogTablo.getItems().add(FXCollections.observableArrayList(
+                    log.olusturmaTarihi.format(fmt),
+                    islemTipiAdi(log.islemTipi),
+                    hesap, tutar,
+                    log.riskOncesi + " → " + log.riskSonrasi,
+                    delta,
+                    log.tetiklenenKural.isEmpty() ? "—" : log.tetiklenenKural,
+                    kaynak));
+        }
+    }
+
+    private static TableColumn<ObservableList<String>, String> izSutun(String baslik, int idx, double gen) {
+        TableColumn<ObservableList<String>, String> col = new TableColumn<>(baslik);
+        col.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                idx < d.getValue().size() ? d.getValue().get(idx) : ""));
+        col.setPrefWidth(gen); col.setMinWidth(gen - 10);
+        return col;
+    }
+
+    private static String riskSeviyesiMetni(int skor) {
+        if (skor >= 86) return "DONDURULDU";
+        if (skor >= 61) return "RİSKLİ";
+        if (skor >= 31) return "İZLENİYOR";
+        return "GÜVENLİ";
+    }
+
+    private static String riskSeviyesiRengi(String seviye) {
+        switch (seviye) {
+            case "DONDURULDU": return "#af1414";
+            case "RİSKLİ":    return "#af4b00";
+            case "İZLENİYOR":  return "#c8a000";
+            default:           return "#146418";
+        }
+    }
+
+    private static String islemTipiAdi(ActivityLog.IslemTipi tip) {
+        switch (tip) {
+            case GIRIS:             return "Giriş";
+            case BASARISIZ_GIRIS:   return "Başarısız Giriş";
+            case PARA_YATIRMA:      return "Para Yatırma";
+            case PARA_CEKME:        return "Para Çekme";
+            case TRANSFER:          return "Transfer";
+            case GERI_AL:           return "Geri Al";
+            case KREDI_ODEME:       return "Kredi Ödemesi";
+            case HESAP_OLUSTURMA:   return "Hesap Oluşturma";
+            case MUSTERI_OLUSTURMA: return "Müşteri Oluşturma";
+            case HESAP_DONDURMA:    return "Hesap Dondurma";
+            case HESAP_COZ:         return "Dondurma Kaldırma";
+            case LIMIT_DEGISIMI:    return "Limit Değişimi";
+            default:                return tip.name();
+        }
+    }
+
+    private static ActivityLog.IslemTipi islemTipiEnum(String ad) {
+        for (ActivityLog.IslemTipi tip : ActivityLog.IslemTipi.values())
+            if (islemTipiAdi(tip).equals(ad)) return tip;
+        return null;
     }
 }

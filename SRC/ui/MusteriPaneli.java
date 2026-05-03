@@ -55,6 +55,12 @@ public class MusteriPaneli extends BorderPane {
     private PasswordField eskiSifreField, yeniSifreField, yeniSifreTekrarField;
     private Label         sifreDurumLabel;
 
+    // Limit Yönetimi
+    private ComboBox<String> limitHesapCombo;
+    private Label            limitMevcutLabel, limitDurumLabel, limitBekleyenLabel;
+    private TextField        limitGunlukCekimField, limitGunlukTransferField;
+    private TextField        limitTekCekimField,    limitTekTransferField;
+
     // Geri alma
     private Button pcGeriAlBtn, trGeriAlBtn;
     private javafx.animation.Timeline geriAlTimeline;
@@ -100,15 +106,17 @@ public class MusteriPaneli extends BorderPane {
         Tab t4 = new Tab("  Transfer  ",      transferSekme());
         Tab t5 = new Tab("  İşlem Geçmişi  ", islemGecmisiSekme());
         Tab t6 = new Tab("  Kredi Yönetimi  ", krediSekme());
-        Tab t7 = new Tab("  Profilim  ",      profilimSekme());
+        Tab t7 = new Tab("  Limitlerimi Yönet  ", limitYonetimSekme());
+        Tab t8 = new Tab("  Profilim  ",      profilimSekme());
 
-        sekmeler.getTabs().addAll(t1, t2, t3, t4, t5, t6, t7);
+        sekmeler.getTabs().addAll(t1, t2, t3, t4, t5, t6, t7, t8);
         sekmeler.getSelectionModel().selectedItemProperty().addListener((obs, o, n) -> {
             if (n == t1) hesaplarimYenile();
             else if (n == t2 || n == t3 || n == t4) combolarYenile();
             else if (n == t5) gecmisComboYenile();
             else if (n == t6) krediCombolariYenile();
-            else if (n == t7) profilYukle();
+            else if (n == t7) limitlerYenile();
+            else if (n == t8) profilYukle();
         });
         setCenter(sekmeler);
     }
@@ -699,6 +707,143 @@ public class MusteriPaneli extends BorderPane {
         if (m == null) return;
         profilAdField.setText(m.getAd());
         profilEpostaField.setText(m.getEposta());
+    }
+
+    // ── Limit Yönetimi ────────────────────────────────────────────────────────
+
+    private ScrollPane limitYonetimSekme() {
+        VBox panel = new VBox(12);
+        panel.setPadding(new Insets(14));
+        panel.setStyle("-fx-background-color: #f0f3f9;");
+
+        // Hesap seçimi
+        VBox secimKart = UITema.kart("Hesap Seçin");
+        limitHesapCombo = new ComboBox<>();
+        limitHesapCombo.setMaxWidth(Double.MAX_VALUE);
+        limitHesapCombo.setPromptText("Hesap seçin...");
+        limitMevcutLabel = UITema.bilgiLabel("–");
+        limitMevcutLabel.setWrapText(true);
+        limitHesapCombo.setOnAction(e -> limitlerYenile());
+        secimKart.getChildren().addAll(new Label("Hesap:"), limitHesapCombo,
+                new Label("Mevcut Limitler:"), limitMevcutLabel);
+
+        // Bekleyen değişim banner
+        limitBekleyenLabel = new Label();
+        limitBekleyenLabel.setWrapText(true);
+        limitBekleyenLabel.setMaxWidth(Double.MAX_VALUE);
+        limitBekleyenLabel.setStyle("-fx-background-color: #fff8dc; -fx-padding: 8; " +
+                "-fx-border-color: #c8a000; -fx-border-radius: 4; -fx-background-radius: 4; " +
+                "-fx-text-fill: #7a5c00; -fx-font-size: 12;");
+        limitBekleyenLabel.setVisible(false);
+        limitBekleyenLabel.setManaged(false);
+
+        // Yeni limit formu
+        VBox formKart = UITema.kart("Yeni Limit Talebi");
+        Label aciklama = new Label(
+            "Talep edilen limitler 24 saat sonra aktif olur.\n" +
+            "Güvenliğiniz için bir SMS doğrulaması gönderilecektir.");
+        aciklama.setStyle("-fx-text-fill: #555; -fx-font-size: 11;");
+        aciklama.setWrapText(true);
+
+        limitGunlukCekimField    = new TextField();  limitGunlukCekimField.setPromptText("örn. 100000");
+        limitGunlukTransferField = new TextField();  limitGunlukTransferField.setPromptText("örn. 100000");
+        limitTekCekimField       = new TextField();  limitTekCekimField.setPromptText("örn. 50000");
+        limitTekTransferField    = new TextField();  limitTekTransferField.setPromptText("örn. 50000");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10); grid.setVgap(8);
+        grid.addRow(0, new Label("Günlük Çekim Limiti (₺):"),    limitGunlukCekimField);
+        grid.addRow(1, new Label("Günlük Transfer Limiti (₺):"), limitGunlukTransferField);
+        grid.addRow(2, new Label("Tek Çekim Limiti (₺):"),       limitTekCekimField);
+        grid.addRow(3, new Label("Tek Transfer Limiti (₺):"),    limitTekTransferField);
+        ColumnConstraints cc1 = new ColumnConstraints(200);
+        ColumnConstraints cc2 = new ColumnConstraints(); cc2.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(cc1, cc2);
+
+        limitDurumLabel = UITema.bilgiLabel("");
+        Button talepBtn = UITema.anaButon("Limit Değişikliği Talep Et");
+        talepBtn.setMaxWidth(Double.MAX_VALUE);
+        talepBtn.setOnAction(e -> limitTalepGonder());
+
+        formKart.getChildren().addAll(aciklama, grid, talepBtn, limitDurumLabel);
+        panel.getChildren().addAll(secimKart, limitBekleyenLabel, formKart);
+        return new ScrollPane(panel);
+    }
+
+    private void limitlerYenile() {
+        if (limitHesapCombo == null) return;
+        String mId = kullanici.getMusteriId();
+        if (mId == null) return;
+
+        // Combo doldur
+        String secili = limitHesapCombo.getValue();
+        limitHesapCombo.getItems().clear();
+        for (Account h : kontrolcu.musteriHesaplari(mId))
+            limitHesapCombo.getItems().add(h.getHesapId() + " – " + h.getHesapTuru());
+        if (secili != null) limitHesapCombo.setValue(secili);
+        if (limitHesapCombo.getValue() == null && !limitHesapCombo.getItems().isEmpty())
+            limitHesapCombo.getSelectionModel().selectFirst();
+
+        String id = seciliHesapId(limitHesapCombo);
+        if (id == null) return;
+
+        // Mevcut limitler
+        double gCekim    = kontrolcu.getGunlukCekimLimiti(id);
+        double gTransfer = kontrolcu.getGunlukTransferLimiti(id);
+        model.HesapLimiti hl = kontrolcu.getHesapLimiti(id);
+        double tCekim    = hl != null ? hl.getTekIslemCekimLimiti()    : 50_000;
+        double tTransfer = hl != null ? hl.getTekIslemTransferLimiti() : 50_000;
+        limitMevcutLabel.setText(String.format(Locale.US,
+            "Günlük Çekim: %,.0f ₺  |  Günlük Transfer: %,.0f ₺  |  Tek Çekim: %,.0f ₺  |  Tek Transfer: %,.0f ₺",
+            gCekim, gTransfer, tCekim, tTransfer));
+
+        // Form alanlarına mevcut değerleri yaz
+        limitGunlukCekimField.setText(String.valueOf((long) gCekim));
+        limitGunlukTransferField.setText(String.valueOf((long) gTransfer));
+        limitTekCekimField.setText(String.valueOf((long) tCekim));
+        limitTekTransferField.setText(String.valueOf((long) tTransfer));
+
+        // Bekleyen değişim varsa göster
+        service.BekleyenLimitDegisimi bekleyen = kontrolcu.getBekleyenLimit(id);
+        if (bekleyen != null && !bekleyen.aktifMi()) {
+            long dk = bekleyen.kalanDakika();
+            long saat = dk / 60, dakika = dk % 60;
+            limitBekleyenLabel.setText(String.format(
+                "Bekleyen Limit Talebi — %d sa %d dk sonra aktif olacak\n" +
+                "Yeni Günlük Çekim: %,.0f ₺  |  Yeni Günlük Transfer: %,.0f ₺  |  " +
+                "Yeni Tek Çekim: %,.0f ₺  |  Yeni Tek Transfer: %,.0f ₺",
+                saat, dakika,
+                bekleyen.yeniLimit.getGunlukCekimLimiti(),
+                bekleyen.yeniLimit.getGunlukTransferLimiti(),
+                bekleyen.yeniLimit.getTekIslemCekimLimiti(),
+                bekleyen.yeniLimit.getTekIslemTransferLimiti()));
+            limitBekleyenLabel.setVisible(true);
+            limitBekleyenLabel.setManaged(true);
+        } else {
+            limitBekleyenLabel.setVisible(false);
+            limitBekleyenLabel.setManaged(false);
+        }
+    }
+
+    private void limitTalepGonder() {
+        String id = seciliHesapId(limitHesapCombo);
+        if (id == null) { UITema.durumGoster(limitDurumLabel, "Hesap seçin.", false); return; }
+        try {
+            double gCekim    = Double.parseDouble(limitGunlukCekimField.getText().trim());
+            double gTransfer = Double.parseDouble(limitGunlukTransferField.getText().trim());
+            double tCekim    = Double.parseDouble(limitTekCekimField.getText().trim());
+            double tTransfer = Double.parseDouble(limitTekTransferField.getText().trim());
+            if (gCekim <= 0 || gTransfer <= 0 || tCekim <= 0 || tTransfer <= 0) {
+                UITema.durumGoster(limitDurumLabel, "Tüm limit değerleri sıfırdan büyük olmalıdır.", false);
+                return;
+            }
+            model.HesapLimiti yeniLimit = new model.HesapLimiti(gCekim, gTransfer, tCekim, tTransfer);
+            String mesaj = kontrolcu.limitDegisimTalep(id, yeniLimit);
+            UITema.durumGoster(limitDurumLabel, mesaj, true);
+            limitlerYenile();
+        } catch (NumberFormatException ex) {
+            UITema.durumGoster(limitDurumLabel, "Geçersiz değer — sadece sayı girin.", false);
+        }
     }
 
     private void profilGuncelle() {

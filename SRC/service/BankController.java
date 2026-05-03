@@ -57,6 +57,8 @@ public class BankController implements IBankService {
     private final List<RiskDinleyici>      dinleyiciler;
     private final Map<String, BekleyenIslem> bekleyenIslemler;
     private final Set<String>              demoMusteri;
+    private final AktiviteLogServisi       logServisi;
+    private final Map<String, BekleyenLimitDegisimi> bekleyenLimitler;
     private BekleyenIslem sonBekleyenIslem;
     private int islemSayaci;
     private int musteriSayaci;
@@ -73,7 +75,9 @@ public class BankController implements IBankService {
         this.kimlikDogrulama = kimlikDogrulama;
         this.dinleyiciler    = new CopyOnWriteArrayList<>();
         this.bekleyenIslemler = new java.util.LinkedHashMap<>();
-        this.demoMusteri     = new HashSet<>();
+        this.demoMusteri      = new HashSet<>();
+        this.logServisi       = new AktiviteLogServisi();
+        this.bekleyenLimitler = new HashMap<>();
     }
 
     // ── Observer yönetimi ─────────────────────────────────────────────────────
@@ -100,6 +104,7 @@ public class BankController implements IBankService {
         Customer musteri = new Customer(id, ad, eposta);
         musteriDeposu.kaydet(musteri);
         kaydedici.kaydet("MUSTERI_OLUSTURULDU: " + id + " | " + ad + " | " + eposta);
+        logEkle(id, null, ActivityLog.IslemTipi.MUSTERI_OLUSTURMA, 0, 0, 0, 0, "", "Yeni müşteri: " + ad);
         otomatikKaydet();
         return musteri;
     }
@@ -134,6 +139,8 @@ public class BankController implements IBankService {
         hesapDeposu.kaydet(hesap);
         musteri.hesapEkle(hesap);
         kaydedici.kaydet("HESAP_OLUSTURULDU: " + hesapId + " | " + tur + " | " + musteriId);
+        logEkle(musteriId, hesapId, ActivityLog.IslemTipi.HESAP_OLUSTURMA, baslangicBakiye,
+                0, 0, 0, "", "Hesap oluşturuldu: " + tur);
         otomatikKaydet();
         return hesap;
     }
@@ -174,19 +181,28 @@ public class BankController implements IBankService {
     public boolean paraYatir(String hesapId, double miktar) {
         Account hesap = hesapDeposu.idIleGetir(hesapId);
         if (hesap == null || miktar <= 0) return false;
+        if (suphelihHesaplar.contains(hesapId)) {
+            kaydedici.kaydet("PARA_YATIRMA_ENGELLENDI_SUPHELI: " + hesapId);
+            return false;
+        }
+        bekleyenLimitleriKontrolEt(hesapId);
         if (!riskMotoru.paraYatirmaGecerliMi(miktar)) {
             kaydedici.kaydet("PARA_YATIRMA_REDDEDILDI: " + hesapId + " miktar=" + miktar);
             return false;
         }
+        int riskOncesi = getRiskSkoru(hesapId);
         String islemId = String.format("TRX%08d", ++islemSayaci);
         hesap.paraYatir(miktar);
         Transaction islem = new Deposit(islemId, miktar, hesapId);
         hesap.islemEkle(islem);
         islemDeposu.kaydet(islem);
-        riskMotoru.yatirmaKaydet(hesapId);
+        riskMotoru.yatirmaKaydet(hesapId, hesap.getSahibiId());
         kaydedici.kaydet("PARA_YATIRILDI: " + islemId + " | " + hesapId + " | +" + miktar);
-        // Para yatırmada bakiye düşüşü riski yok, bakiyeOncesi=0 geçilir
-        islemSonrasiRiskKontrol(hesapId, hesap.getSahibiId(), 0.0, miktar);
+        String kurallar = islemSonrasiRiskKontrol(hesapId, hesap.getSahibiId(), 0.0, miktar, islemId, IslemRiskAgirlik.PARA_YATIRMA, null);
+        int riskSonrasi = getRiskSkoru(hesapId);
+        logEkle(hesap.getSahibiId(), hesapId, ActivityLog.IslemTipi.PARA_YATIRMA, miktar,
+                riskOncesi, riskSonrasi - riskOncesi, riskSonrasi, kurallar,
+                String.format("Para yatırma: %,.2f ₺", miktar));
         otomatikKaydet();
         return true;
     }
@@ -199,25 +215,29 @@ public class BankController implements IBankService {
             kaydedici.kaydet("PARA_CEKME_ENGELLENDI_SUPHELI: " + hesapId);
             return false;
         }
+        bekleyenLimitleriKontrolEt(hesapId);
         if (!riskMotoru.paraCekmeGecerliMi(hesap, miktar)) {
             kaydedici.kaydet("PARA_CEKME_REDDEDILDI: " + hesapId + " miktar=" + miktar);
             throw new model.RiskLimitiAsildiException(
                     "Günlük çekim limiti aşıldı",
                     riskMotoru.getGunlukCekimLimit(hesapId), miktar);
         }
+        int riskOncesi = getRiskSkoru(hesapId);
         String islemId = String.format("TRX%08d", ++islemSayaci);
         if (!hesap.paraCek(miktar)) {
             throw new model.YetersizBakiyeException(hesap.getBakiye(), miktar);
         }
-        riskMotoru.cekimKaydet(hesapId, miktar);
+        riskMotoru.cekimKaydet(hesapId, miktar, hesap.getSahibiId());
         Transaction islem = new Withdraw(islemId, miktar, hesapId);
         hesap.islemEkle(islem);
         islemDeposu.kaydet(islem);
         kaydedici.kaydet("PARA_CEKILDI: " + islemId + " | " + hesapId + " | -" + miktar);
-        // Geri alma penceresi
-        sonBekleyenIslem = new BekleyenIslem(islemId, hesapId, null, miktar, "CEKIM");
-        bekleyenIslemler.put(islemId, sonBekleyenIslem);
-        islemSonrasiRiskKontrol(hesapId, hesap.getSahibiId(), hesap.getBakiye() + miktar, miktar);
+        sonBekleyenIslem = null;
+        String kurallar = islemSonrasiRiskKontrol(hesapId, hesap.getSahibiId(), hesap.getBakiye() + miktar, miktar, islemId, IslemRiskAgirlik.NAKIT_CEKIM, null);
+        int riskSonrasi = getRiskSkoru(hesapId);
+        logEkle(hesap.getSahibiId(), hesapId, ActivityLog.IslemTipi.PARA_CEKME, miktar,
+                riskOncesi, riskSonrasi - riskOncesi, riskSonrasi, kurallar,
+                String.format("Para çekme: %,.2f ₺", miktar));
         otomatikKaydet();
         return true;
     }
@@ -235,83 +255,149 @@ public class BankController implements IBankService {
             kaydedici.kaydet("TRANSFER_REDDEDILDI_SUPHELI_HEDEF: " + kaynakId + " -> " + hedefId);
             return false;
         }
+        bekleyenLimitleriKontrolEt(kaynakId);
         if (!riskMotoru.transferGecerliMi(kaynak, miktar)) {
             kaydedici.kaydet("TRANSFER_REDDEDILDI: " + kaynakId + " -> " + hedefId + " miktar=" + miktar);
             throw new model.RiskLimitiAsildiException(
                     "Transfer limiti aşıldı",
                     riskMotoru.getGunlukTransferLimit(kaynakId), miktar);
         }
+        int riskOncesi = getRiskSkoru(kaynakId);
         double bakiyeOncesi = kaynak.getBakiye();
         if (!kaynak.paraCek(miktar)) {
             throw new model.YetersizBakiyeException(kaynak.getBakiye(), miktar);
         }
         hedef.paraYatir(miktar);
         String islemId = String.format("TRX%08d", ++islemSayaci);
-        riskMotoru.transferKaydet(kaynakId, miktar);
+        riskMotoru.transferKaydet(kaynakId, miktar, kaynak.getSahibiId());
         Transfer islem = new Transfer(islemId, miktar, kaynakId, hedefId);
         kaynak.islemEkle(islem);
         hedef.islemEkle(islem);
         islemDeposu.kaydet(islem);
         kaydedici.kaydet("TRANSFER_YAPILDI: " + islemId + " | " + kaynakId + " -> " + hedefId + " | " + miktar);
-        // Geri alma penceresi
         sonBekleyenIslem = new BekleyenIslem(islemId, kaynakId, hedefId, miktar, "TRANSFER");
         bekleyenIslemler.put(islemId, sonBekleyenIslem);
-        islemSonrasiRiskKontrol(kaynakId, kaynak.getSahibiId(), bakiyeOncesi, miktar);
+        String kurallar = islemSonrasiRiskKontrol(kaynakId, kaynak.getSahibiId(), bakiyeOncesi, miktar, islemId, IslemRiskAgirlik.DIS_TRANSFER, hedefId);
+        int riskSonrasi = getRiskSkoru(kaynakId);
+        logEkle(kaynak.getSahibiId(), kaynakId, ActivityLog.IslemTipi.TRANSFER, miktar,
+                riskOncesi, riskSonrasi - riskOncesi, riskSonrasi, kurallar,
+                String.format("Transfer: %,.2f ₺ → %s", miktar, hedefId));
         otomatikKaydet();
         return true;
     }
 
-    private void islemSonrasiRiskKontrol(String hesapId, String musteriId,
-                                          double bakiyeOncesi, double miktar) {
-        // Her kural puan ekler — dondurma yok, eşik aşılınca otomatik dondurur
-        if (riskMotoru.yuksekRiskMi(miktar)) {
-            riskMotoru.skorEkle(hesapId, 20);
-            riskYayinla(hesapId, musteriId, RiskOlayTuru.YUKSEK_TUTAR, miktar,
-                    "Büyük tutarlı işlem (" + String.format("%.2f", miktar) + " ₺)");
+    private String islemSonrasiRiskKontrol(String hesapId, String musteriId,
+                                            double bakiyeOncesi, double miktar,
+                                            String islemId, IslemRiskAgirlik agirlik,
+                                            String hedefHesapId) {
+        List<String> tetiklenen = new ArrayList<>();
+        Account hesap = hesapDeposu.idIleGetir(hesapId);
+
+        // ── KURAL 1: Kart hırsızlığı — 10 dk'da 3+ çekim VE toplam ≥25K ────────
+        // Sıradan maaş çekimi (tek seferlik büyük çekim) bunu TETIKLEMEZ.
+        // Tetiklemesi için hırsız gibi art arda birden fazla çekim gerekir.
+        if (agirlik == IslemRiskAgirlik.NAKIT_CEKIM && riskMotoru.hizliBoşaltmaMi(hesapId)) {
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, 40, IslemRiskAgirlik.NAKIT_CEKIM);
+            riskYayinla(hesapId, musteriId, RiskOlayTuru.COK_FAZLA_ISLEM, miktar,
+                    String.format("Hızlı hesap boşaltma: 10 dk'da %d çekim, toplam %.0f ₺",
+                            riskMotoru.kisaVadeliCekimAdedi(hesapId), riskMotoru.kisaVadeliToplamCekim(hesapId)));
+            tetiklenen.add("Hızlı Boşaltma");
         }
-        if (riskMotoru.aniDususVarMi(bakiyeOncesi, miktar)) {
-            riskMotoru.skorEkle(hesapId, 15);
-            riskYayinla(hesapId, musteriId, RiskOlayTuru.ANI_BAKIYE_DUSUSU, miktar,
-                    "Ani bakiye düşüşü — bakiyenin %" + (int)(riskMotoru.getAniDususOrani() * 100) + "'inden fazlası");
-        }
+
+        // ── KURAL 2: Gece saati çekimi — uyurken çalınan kart ──────────────────
+        // 01:00-06:00 arası ≥5K: normal insan bu saatte ATM'ye gitmez.
         if (riskMotoru.geceModuRisklimi(miktar)) {
-            riskMotoru.skorEkle(hesapId, 15);
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, 20, agirlik);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.GECE_MODU_ISLEM, miktar,
-                    "Gece saatinde (01:00-06:00) yüksek tutarlı işlem");
+                    "Gece saati (01:00-06:00) yüksek tutarlı işlem — çalınan kart şüphesi");
+            tetiklenen.add("Gece Çekimi");
         }
-        if (riskMotoru.kisaVadeliCokIslemMi(hesapId)) {
-            riskMotoru.skorEkle(hesapId, 30);
+
+        // ── KURAL 3: Ani hesap boşaltma — tek işlemde bakiyenin %90'ı, min 10K ─
+        // Kira veya araba alımı gibi büyük ödemeler bu eşiği nadiren geçer çünkü
+        // insanlar tüm birikimlerini tek seferde harcamaz. Geçerse şüphelidir.
+        if (riskMotoru.aniDususVarMi(bakiyeOncesi, miktar)) {
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, 25, agirlik);
+            riskYayinla(hesapId, musteriId, RiskOlayTuru.ANI_BAKIYE_DUSUSU, miktar,
+                    String.format("Bakiyenin %%%.0f'i tek işlemde çekildi (%.0f ₺ / %.0f ₺)",
+                            riskMotoru.getAniDususOrani() * 100, miktar, bakiyeOncesi));
+            tetiklenen.add("Ani Boşalma");
+        }
+
+        // ── KURAL 4: Yapılandırma — kara para aklama tekniği ───────────────────
+        // Eşiğin hemen altında (12.750-14.999 ₺) 3+ ardışık işlem.
+        // Normal harcama bu kalıbı oluşturmaz.
+        if (hesap != null && riskMotoru.yapilandirmaVarMi(hesap)) {
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, 20, IslemRiskAgirlik.DAVRANISSAL);
+            riskYayinla(hesapId, musteriId, RiskOlayTuru.YUKSEK_TUTAR, miktar,
+                    "Yapılandırma şüphesi: eşik altında ardışık işlem kalıbı");
+            tetiklenen.add("Yapılandırma");
+        }
+
+        // ── KURAL 5: Müşteri velocity — hesap ele geçirildi senaryosu ──────────
+        // Tüm hesaplarda adaptif eşiği aşan işlem hızı.
+        if (riskMotoru.kisaVadeliCokIslemMiMusteri(musteriId)) {
+            int ceza = riskMotoru.velocityCezasi(musteriId);
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, ceza, IslemRiskAgirlik.DAVRANISSAL);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.COK_FAZLA_ISLEM, miktar,
-                    "5 dk içinde yüksek işlem sıklığı (" + riskMotoru.kisaVadeliIslemSayisi(hesapId) + " işlem)");
+                    "Anormal işlem hızı: 5 dk'da " + riskMotoru.kisaVadeliMusteriIslemSayisi(musteriId) + " işlem");
+            tetiklenen.add("Anormal Hız");
         }
+
+        // ── KURAL 6: Günlük işlem sayısı — bot/otomatik saldırı ────────────────
         if (riskMotoru.cokFazlaIslemMi(hesapId)) {
-            riskMotoru.skorEkle(hesapId, 25);
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, 20, IslemRiskAgirlik.DAVRANISSAL);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.COK_FAZLA_ISLEM, miktar,
-                    "Günlük çok fazla işlem (" + riskMotoru.bugunIslemSayisi(hesapId) + " işlem)");
+                    "Günde " + riskMotoru.bugunIslemSayisi(hesapId) + " işlem — bot şüphesi");
+            tetiklenen.add("Günlük Limit");
         }
-        // Eşik aşıldıysa otomatik dondur
-        if (!suphelihHesaplar.contains(hesapId)) {
-            int skor = riskMotoru.getRiskSkoru(hesapId);
-            if (skor >= RiskEngine.SKOR_DONDUR) {
-                isaretleSebeple(hesapId, musteriId,
-                        "Risk skoru " + skor + "/100 eşiği aştı — otomatik donduruldu", miktar);
+
+        // ── KURAL 7: Yeni alıcıya büyük transfer — hesap ele geçirme tespiti ────
+        // Daha önce para gönderilmemiş hesaba büyük para gidiyorsa şüpheli.
+        // İlk kez küçük fatura ödemesi (300₺) → kayıt edilir, risk eklenmez.
+        if (hedefHesapId != null && riskMotoru.yeniAliciMi(musteriId, hedefHesapId)) {
+            riskMotoru.aliciKaydet(musteriId, hedefHesapId);
+            if (miktar >= RiskEngine.YENI_ALICI_BUYUK_ESIK) {
+                riskMotoru.skorEkle(islemId, hesapId, musteriId, 30, IslemRiskAgirlik.DIS_TRANSFER);
+                riskYayinla(hesapId, musteriId, RiskOlayTuru.YUKSEK_TUTAR, miktar,
+                        String.format("Bilinmeyen hesaba büyük transfer: %.0f ₺", miktar));
+                tetiklenen.add("Yeni Alıcı Büyük Transfer");
+            } else if (miktar >= RiskEngine.YENI_ALICI_ORTA_ESIK) {
+                riskMotoru.skorEkle(islemId, hesapId, musteriId, 12, IslemRiskAgirlik.DIS_TRANSFER);
+                tetiklenen.add("Yeni Alıcı");
             }
         }
+
+        // ── Otomatik dondurma ────────────────────────────────────────────────────
+        if (!suphelihHesaplar.contains(hesapId)) {
+            int skor = riskMotoru.getRiskSkoru(hesapId, musteriId);
+            if (skor >= RiskEngine.SKOR_DONDUR) {
+                isaretleSebeple(hesapId, musteriId,
+                        "Risk skoru " + skor + "/100 — otomatik donduruldu", miktar,
+                        DondurmaSecegi.OTOMATIK);
+                tetiklenen.add("Oto. Dondurma");
+            }
+        }
+        return String.join(", ", tetiklenen);
     }
 
     // ── Şüpheli hesap yönetimi ────────────────────────────────────────────────
 
     public void hesapIsaretle(String hesapId) {
         Account h = hesapDeposu.idIleGetir(hesapId);
-        isaretleSebeple(hesapId, h != null ? h.getSahibiId() : null,
-                "Yönetici tarafından şüpheli işaretlendi", 0);
+        String musteriId = h != null ? h.getSahibiId() : null;
+        int skor = getRiskSkoru(hesapId);
+        isaretleSebeple(hesapId, musteriId, "Yönetici tarafından şüpheli işaretlendi", 0, DondurmaSecegi.MANUEL);
+        logEkle(musteriId, hesapId, ActivityLog.IslemTipi.HESAP_DONDURMA, 0,
+                skor, 0, skor, "MANUEL", "Yönetici tarafından donduruldu");
         otomatikKaydet();
     }
 
-    private void isaretleSebeple(String hesapId, String musteriId, String sebep, double miktar) {
+    private void isaretleSebeple(String hesapId, String musteriId, String sebep, double miktar, DondurmaSecegi sekil) {
         boolean zatenSupheli = suphelihHesaplar.contains(hesapId);
         suphelihHesaplar.add(hesapId);
         supheSebebleri.put(hesapId, new SupheSebebi(hesapId, musteriId, sebep, miktar));
+        riskMotoru.dondurmaKaydet(hesapId, sekil, sebep);
         kaydedici.kaydet("HESAP_SUPHELI: " + hesapId + " | " + sebep);
         if (!zatenSupheli) {
             riskYayinla(hesapId, musteriId, RiskOlayTuru.HESAP_DONDURULDU, miktar,
@@ -322,8 +408,12 @@ public class BankController implements IBankService {
     public void isaretKaldir(String hesapId) {
         Account h = hesapDeposu.idIleGetir(hesapId);
         String musteriId = h != null ? h.getSahibiId() : null;
+        int skor = getRiskSkoru(hesapId);
         suphelihHesaplar.remove(hesapId);
         supheSebebleri.remove(hesapId);
+        riskMotoru.dondurmaKaldir(hesapId);
+        logEkle(musteriId, hesapId, ActivityLog.IslemTipi.HESAP_COZ, 0,
+                skor, 0, skor, "", "Dondurma kaldırıldı");
         kaydedici.kaydet("SUPHELI_KALDIRILDI: " + hesapId);
         riskYayinla(hesapId, musteriId, RiskOlayTuru.SUPHELI_KALDIRILDI, 0,
                 "Şüpheli işaret kaldırıldı: " + hesapId);
@@ -405,9 +495,11 @@ public class BankController implements IBankService {
         }
         musteriDeposu.sil(musteriId);
         demoMusteri.remove(musteriId);
+        String kulAdiSil = null;
         for (Kullanici k : kimlikDogrulama.getKullanicilar().values()) {
-            if (musteriId.equals(k.getMusteriId())) { k.pasifYap(); break; }
+            if (musteriId.equals(k.getMusteriId())) { kulAdiSil = k.getKullaniciAdi(); break; }
         }
+        if (kulAdiSil != null) kimlikDogrulama.getKullanicilar().remove(kulAdiSil);
         kaydedici.kaydet("MUSTERI_SILINDI: " + musteriId);
         durumKaydet(KAYIT_DOSYASI);
         return true;
@@ -433,8 +525,14 @@ public class BankController implements IBankService {
 
     // ── Kalıcılık ─────────────────────────────────────────────────────────────
 
-    /** Otomatik kayıt devre dışı — kullanıcı "Durumu Kaydet" butonuna basmalıdır. */
-    private void otomatikKaydet() { /* kayıt manuel */ }
+    private volatile boolean botModuAktif = false;
+
+    public void botModuBaslat() { botModuAktif = true; }
+    public void botModuBitir()  { botModuAktif = false; }
+
+    private void otomatikKaydet() {
+        if (!botModuAktif) durumKaydet(KAYIT_DOSYASI);
+    }
 
     public void durumKaydet(String dosyaYolu) {
         BankState durum = new BankState(
@@ -444,8 +542,14 @@ public class BankController implements IBankService {
                 new HashSet<>(suphelihHesaplar),
                 new HashMap<>(supheSebebleri),
                 new HashMap<>(riskMotoru.getOzelLimitler()),
-                new HashMap<>(riskMotoru.getRiskSkorlari()),
-                new HashMap<>(riskMotoru.getSkorGuncelleme()),
+                new HashSet<>(demoMusteri),
+                new ArrayList<>(riskMotoru.getOlayKayitlari()),
+                new HashMap<>(riskMotoru.getMusteriProfilleri()),
+                new HashMap<>(riskMotoru.getDondurmaKayitlari()),
+                new HashMap<>(riskMotoru.getKullaniciKategorileri()),
+                new ArrayList<>(logServisi.getLoglar()),
+                new HashMap<>(riskMotoru.getBilinenAlicilar()),
+                new HashMap<>(bekleyenLimitler),
                 musteriSayaci, hesapSayaci, islemSayaci);
         Serializer.serialize(durum, dosyaYolu);
         kaydedici.kaydet("DURUM_KAYDEDILDI: " + dosyaYolu);
@@ -471,7 +575,47 @@ public class BankController implements IBankService {
         if (durum.getSupheSebebleri()   != null) supheSebebleri.putAll(durum.getSupheSebebleri());
         if (durum.getHesapLimitleri()   != null) riskMotoru.ozelLimitleriYukle(durum.getHesapLimitleri());
         if (durum.getKullanicilar()     != null) kimlikDogrulama.kullanicilariYukle(durum.getKullanicilar());
-        riskMotoru.riskSkorlariniYukle(durum.getRiskSkorlari(), durum.getSkorGuncelleme());
+        riskMotoru.riskVerileriniYukle(
+                durum.getRiskOlayKayitlari(),
+                durum.getMusteriProfilleri(),
+                durum.getDondurmaKayitlari(),
+                durum.getKullaniciKategorileri());
+        logServisi.loklarYukle(durum.getAktiviteLoglari());
+        riskMotoru.alicilariYukle(durum.getBilinenAlicilar());
+        bekleyenLimitler.clear();
+        if (durum.getBekleyenLimitler() != null) bekleyenLimitler.putAll(durum.getBekleyenLimitler());
+
+        demoMusteri.clear();
+        if (durum.getDemoMusteriler() != null) demoMusteri.addAll(durum.getDemoMusteriler());
+
+        // Demo müşterileri ve hesaplarını temizle — her açılışta taze başlar
+        Set<String> demoHesapIdleri = new HashSet<>();
+        for (String demId : new HashSet<>(demoMusteri)) {
+            Customer dm = musteriDeposu.idIleGetir(demId);
+            if (dm != null) {
+                for (Account dh : new ArrayList<>(dm.getHesaplar())) {
+                    demoHesapIdleri.add(dh.getHesapId());
+                    hesapDeposu.sil(dh.getHesapId());
+                    suphelihHesaplar.remove(dh.getHesapId());
+                    supheSebebleri.remove(dh.getHesapId());
+                }
+            }
+            musteriDeposu.sil(demId);
+            String kulAdiSil = null;
+            for (Kullanici k : kimlikDogrulama.getKullanicilar().values()) {
+                if (demId.equals(k.getMusteriId())) { kulAdiSil = k.getKullaniciAdi(); break; }
+            }
+            if (kulAdiSil != null) kimlikDogrulama.getKullanicilar().remove(kulAdiSil);
+        }
+        if (!demoHesapIdleri.isEmpty()) riskMotoru.hesapRiskOlaylariniSil(demoHesapIdleri);
+        riskMotoru.musteriProfilleriniSil(new HashSet<>(demoMusteri));
+        demoMusteri.clear();
+        // Demo kaynaklı aktivite loglarını da temizle
+        final Set<String> demoIdleri = new HashSet<>(demoHesapIdleri);
+        demoIdleri.addAll(demoMusteri);  // empty at this point but kept for clarity
+        logServisi.loklarYukle(logServisi.getLoglar().stream()
+                .filter(l -> l.kaynak != ActivityLog.Kaynak.DEMO)
+                .collect(java.util.stream.Collectors.toList()));
 
         musteriSayaci = durum.getMusteriSayaci();
         hesapSayaci   = durum.getHesapSayaci();
@@ -517,12 +661,13 @@ public class BankController implements IBankService {
         Account hedef  = hesapDeposu.idIleGetir(krediHesapId);
         if (kaynak == null || !(hedef instanceof KrediHesabi)) return -1;
         KrediHesabi kh = (KrediHesabi) hedef;
-        if (kh.getBakiye() >= 0) return 0; // borç yok
+        if (kh.getBakiye() >= 0) return 0;
         if (kaynak.getBakiye() < miktar) throw new model.YetersizBakiyeException(kaynak.getBakiye(), miktar);
+        bekleyenLimitleriKontrolEt(kaynakHesapId);
+        int riskOncesi = getRiskSkoru(kaynakHesapId);
         kaynak.paraCek(miktar);
         double gercekOdeme = kh.krediOde(miktar);
         String islemId = String.format("TRX%08d", ++islemSayaci);
-        // İşlem geçmişine yaz: kaynak hesaptan çekim, kredi hesabına yatırma
         Transaction cekimIslem = new Withdraw(islemId, gercekOdeme, kaynakHesapId);
         Transaction yatirmaIslem = new Deposit(islemId, gercekOdeme, krediHesapId);
         kaynak.islemEkle(cekimIslem);
@@ -531,7 +676,11 @@ public class BankController implements IBankService {
         islemDeposu.kaydet(yatirmaIslem);
         kaydedici.kaydet("KREDI_ODEME: " + islemId + " | " + kaynakHesapId
                 + " -> " + krediHesapId + " | " + gercekOdeme);
-        islemSonrasiRiskKontrol(kaynakHesapId, kaynak.getSahibiId(), kaynak.getBakiye() + miktar, miktar);
+        String kurallar = islemSonrasiRiskKontrol(kaynakHesapId, kaynak.getSahibiId(), kaynak.getBakiye() + miktar, miktar, islemId, IslemRiskAgirlik.KREDI_CEKIM, null);
+        int riskSonrasi = getRiskSkoru(kaynakHesapId);
+        logEkle(kaynak.getSahibiId(), kaynakHesapId, ActivityLog.IslemTipi.KREDI_ODEME, gercekOdeme,
+                riskOncesi, riskSonrasi - riskOncesi, riskSonrasi, kurallar,
+                String.format("Kredi ödemesi: %,.2f ₺ → %s", gercekOdeme, krediHesapId));
         return gercekOdeme;
     }
 
@@ -555,14 +704,32 @@ public class BankController implements IBankService {
 
     // ── Risk Skoru ────────────────────────────────────────────────────────────
 
-    public int    getRiskSkoru(String hesapId)    { return riskMotoru.getRiskSkoru(hesapId); }
+    public int getRiskSkoru(String hesapId) {
+        Account h = hesapDeposu.idIleGetir(hesapId);
+        String musteriId = h != null ? h.getSahibiId() : null;
+        int skor = riskMotoru.getRiskSkoru(hesapId, musteriId);
+        if (skor < RiskEngine.SKOR_OTOMATIK_COZ && suphelihHesaplar.contains(hesapId)
+                && riskMotoru.getDondurmaSecegi(hesapId) == DondurmaSecegi.OTOMATIK) {
+            suphelihHesaplar.remove(hesapId);
+            supheSebebleri.remove(hesapId);
+            riskMotoru.dondurmaKaldir(hesapId);
+            kaydedici.kaydet("OTOMATIK_DONDURMA_COZULDU: " + hesapId + " skor=" + skor);
+        }
+        return skor;
+    }
     public String getRiskSeviyesi(String hesapId) { return riskMotoru.getRiskSeviyesi(hesapId); }
-    public void   skorEkleDemo(String hesapId, int puan)         { riskMotoru.skorEkle(hesapId, puan); }
-    public boolean geceModuMu()                                  { return riskMotoru.geceModuMu(); }
-    public boolean kisaVadeliCokIslemMi(String hesapId)          { return riskMotoru.kisaVadeliCokIslemMi(hesapId); }
-    public boolean cokFazlaIslemMi(String hesapId)               { return riskMotoru.cokFazlaIslemMi(hesapId); }
-    public int     bugunIslemSayisi(String hesapId)              { return riskMotoru.bugunIslemSayisi(hesapId); }
-    public long    kisaVadeliIslemSayisi(String hesapId)         { return riskMotoru.kisaVadeliIslemSayisi(hesapId); }
+    public void   skorEkleDemo(String hesapId, int puan)              { riskMotoru.skorEkle(hesapId, puan); }
+    public boolean geceModuMu()                                       { return riskMotoru.geceModuMu(); }
+    public boolean kisaVadeliCokIslemMi(String hesapId)               { return riskMotoru.kisaVadeliCokIslemMi(hesapId); }
+    public boolean kisaVadeliCokIslemMiMusteri(String musteriId)      { return riskMotoru.kisaVadeliCokIslemMiMusteri(musteriId); }
+    public boolean cokFazlaIslemMi(String hesapId)                    { return riskMotoru.cokFazlaIslemMi(hesapId); }
+    public int     bugunIslemSayisi(String hesapId)                   { return riskMotoru.bugunIslemSayisi(hesapId); }
+    public long    kisaVadeliIslemSayisi(String hesapId)              { return riskMotoru.kisaVadeliIslemSayisi(hesapId); }
+    public long    kisaVadeliMusteriIslemSayisi(String musteriId)     { return riskMotoru.kisaVadeliMusteriIslemSayisi(musteriId); }
+    public double  getYuksekRiskEsigi()                               { return riskMotoru.getYuksekRiskEsigi(); }
+    public DondurmaSecegi      getDondurmaSecegi(String hesapId)      { return riskMotoru.getDondurmaSecegi(hesapId); }
+    public void kullaniciKategorisiAta(String musteriId, KullaniciKategorisi kat) { riskMotoru.kullaniciKategorisiAta(musteriId, kat); }
+    public KullaniciKategorisi getKullaniciKategorisi(String musteriId) { return riskMotoru.getKullaniciKategorisi(musteriId); }
 
     /**
      * İşlem öncesi risk kontrolü — UI, kullanıcıya onay dialogu göstermek için kullanır.
@@ -595,15 +762,17 @@ public class BankController implements IBankService {
         BekleyenIslem bekleyen = bekleyenIslemler.get(islemId);
         if (bekleyen == null || !bekleyen.geriAlinabilirMi()) return null;
         try {
-            if ("CEKIM".equals(bekleyen.tip)) {
-                Account h = hesapDeposu.idIleGetir(bekleyen.kaynakId);
-                if (h != null) h.paraYatir(bekleyen.miktar);
-            } else if ("TRANSFER".equals(bekleyen.tip)) {
+            if ("TRANSFER".equals(bekleyen.tip)) {
                 Account kaynak = hesapDeposu.idIleGetir(bekleyen.kaynakId);
                 Account hedef  = hesapDeposu.idIleGetir(bekleyen.hedefId);
                 if (kaynak != null && hedef != null && hedef.getBakiye() >= bekleyen.miktar) {
                     hedef.paraCek(bekleyen.miktar);
                     kaynak.paraYatir(bekleyen.miktar);
+                    riskMotoru.islemRiskOlaylariniIptalEt(islemId);
+                    int skorSonra = getRiskSkoru(bekleyen.kaynakId);
+                    logEkle(kaynak.getSahibiId(), bekleyen.kaynakId, ActivityLog.IslemTipi.GERI_AL,
+                            bekleyen.miktar, skorSonra, 0, skorSonra, "Transfer iptali",
+                            String.format("Transfer geri alındı: %,.2f ₺", bekleyen.miktar));
                 }
             }
             bekleyenIslemler.remove(islemId);
@@ -614,6 +783,48 @@ public class BankController implements IBankService {
             return bekleyen;
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    // ── Aktivite loglama ──────────────────────────────────────────────────────
+
+    private void logEkle(String musteriId, String hesapId, ActivityLog.IslemTipi tip,
+                         double miktar, int riskOncesi, int riskDelta, int riskSonrasi,
+                         String kural, String aciklama) {
+        ActivityLog.Kaynak kaynak = (musteriId != null && isDemoMusteri(musteriId))
+                ? ActivityLog.Kaynak.DEMO
+                : ActivityLog.Kaynak.GERCEK;
+        logServisi.kaydet(new ActivityLog(musteriId, hesapId, tip, miktar,
+                riskOncesi, riskDelta, riskSonrasi, kural, aciklama, kaynak));
+    }
+
+    public AktiviteLogServisi getLogServisi() { return logServisi; }
+
+    // ── Bekleyen limit yönetimi ───────────────────────────────────────────────
+
+    public String limitDegisimTalep(String hesapId, HesapLimiti yeniLimit) {
+        bekleyenLimitler.put(hesapId, new BekleyenLimitDegisimi(hesapId, yeniLimit));
+        logEkle(getHesap(hesapId) != null ? getHesap(hesapId).getSahibiId() : null,
+                hesapId, ActivityLog.IslemTipi.LIMIT_DEGISIMI, 0, 0, 0, 0,
+                "", "Limit değişim talebi oluşturuldu (24s sonra aktif)");
+        otomatikKaydet();
+        return "📱 SMS gönderildi. Yeni limitler 24 saat sonra otomatik olarak aktif olacak.";
+    }
+
+    public BekleyenLimitDegisimi getBekleyenLimit(String hesapId) {
+        return bekleyenLimitler.get(hesapId);
+    }
+
+    private void bekleyenLimitleriKontrolEt(String hesapId) {
+        BekleyenLimitDegisimi bekleyen = bekleyenLimitler.get(hesapId);
+        if (bekleyen != null && bekleyen.aktifMi()) {
+            riskMotoru.limitGuncelle(hesapId, bekleyen.yeniLimit);
+            bekleyenLimitler.remove(hesapId);
+            Account h = hesapDeposu.idIleGetir(hesapId);
+            logEkle(h != null ? h.getSahibiId() : null, hesapId,
+                    ActivityLog.IslemTipi.LIMIT_DEGISIMI, 0, 0, 0, 0,
+                    "", "Yeni limitler aktif edildi");
+            kaydedici.kaydet("BEKLEYEN_LIMIT_AKTIF: " + hesapId);
         }
     }
 

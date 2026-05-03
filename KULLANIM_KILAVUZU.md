@@ -6,14 +6,12 @@
 
 | Gereksinim | Sürüm | Konum |
 |---|---|---|
-| Java (JDK) | 21 (Temurin 21.0.11) | `C:\Java\jdk-21` veya PATH'te |
-| JavaFX SDK | 21 | `C:\Java\javafx-sdk-21` |
+| Java (JDK) | 25 (Eclipse Temurin) | `C:/Program Files/Eclipse Adoptium/jdk-25.0.0.36-hotspot` |
+| JavaFX SDK | 26.0.1 | `C:/Users/tunce/OneDrive/Desktop/javafx-sdk-26.0.1` |
 | VS Code | Herhangi | — |
 | Java Extension Pack | VS Code eklentisi | Extension Marketplace |
 
-> **Önemli:** JavaFX SDK sürümü Java sürümüyle eşleşmelidir.  
-> Java 21 → JavaFX 21 SDK kullanılmalıdır.  
-> `C:\Java\javafx-sdk-21\lib` klasörünün var olduğundan emin olun.
+> **Önemli:** `.vscode/settings.json` içindeki `java.project.referencedLibraries` yolu JavaFX SDK'ya işaret etmelidir.
 
 ---
 
@@ -82,28 +80,22 @@ VS Code'da projeyi açıkken **F5** veya sağ üstteki **▶ Run** butonuna bas�
 
 ### Manuel Komut Satırı
 
-**PowerShell** veya **Komut İstemi**'nde proje ana dizininden:
+**PowerShell**'de proje ana dizininden (`javaproje/`):
 
 ```powershell
-# Önce bin klasörünü oluştur (ilk kez)
-New-Item -ItemType Directory -Force -Path bin\ui
-
 # Derle
-javac --module-path "C:\Java\javafx-sdk-21\lib" `
-      --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.swing `
-      -d bin `
-      SRC\Main.java SRC\model\*.java SRC\service\*.java SRC\persistence\*.java SRC\ui\*.java
-
-# CSS dosyasını bin'e kopyala
-copy SRC\ui\banka.css bin\ui\banka.css
+javac --module-path "C:/Users/tunce/OneDrive/Desktop/javafx-sdk-26.0.1/lib" `
+      --add-modules javafx.controls,javafx.fxml `
+      -encoding UTF-8 -cp SRC -d out `
+      SRC/model/*.java SRC/service/*.java SRC/ui/*.java SRC/Main.java
 ```
 
 ### Manuel Çalıştırma
 
 ```powershell
-java --module-path "C:\Java\javafx-sdk-21\lib" `
-     --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.swing `
-     -cp bin Main
+java --module-path "C:/Users/tunce/OneDrive/Desktop/javafx-sdk-26.0.1/lib" `
+     --add-modules javafx.controls,javafx.fxml `
+     -cp out Main
 ```
 
 ---
@@ -193,8 +185,8 @@ Admin olarak tüm hesaplara para yatırma, çekme ve transfer yapılabilir.
 | Maksimum tek para yatırma | 100,000 ₺ |
 | Maksimum tek çekim | 50,000 ₺ |
 | Maksimum tek transfer | 50,000 ₺ |
-| Günlük çekim toplamı | 20,000 ₺ |
-| Günlük transfer toplamı | 30,000 ₺ |
+| Günlük çekim toplamı | 100,000 ₺ |
+| Günlük transfer toplamı | 100,000 ₺ |
 
 ---
 
@@ -254,7 +246,7 @@ Admin olarak tüm hesaplara para yatırma, çekme ve transfer yapılabilir.
 
 ## 6. Müşteri Paneli
 
-Müşteri olarak giriş yapıldığında **7 sekmeli** müşteri paneli açılır.  
+Müşteri olarak giriş yapıldığında **8 sekmeli** müşteri paneli açılır.  
 Her müşteri yalnızca kendi hesaplarını görebilir.
 
 ---
@@ -287,7 +279,7 @@ Her müşteri yalnızca kendi hesaplarını görebilir.
 
 **Kısıtlamalar:**
 - Şüpheli işaretli hesaptan çekim yapılamaz
-- Günlük çekim limiti aşılamaz (varsayılan 20,000 ₺)
+- Günlük çekim limiti aşılamaz (varsayılan 100,000 ₺)
 - Tek işlem limiti aşılamaz (varsayılan 50,000 ₺)
 - Bakiye yetersizse işlem reddedilir
 
@@ -307,7 +299,7 @@ Her müşteri yalnızca kendi hesaplarını görebilir.
 **Kısıtlamalar:**
 - Şüpheli hesaptan transfer yapılamaz
 - Şüpheli hesaba transfer yapılamaz
-- Günlük transfer limiti aşılamaz (varsayılan 30,000 ₺)
+- Günlük transfer limiti aşılamaz (varsayılan 100,000 ₺)
 - Tek işlem limiti aşılamaz (varsayılan 50,000 ₺)
 
 **3 Dakika İçinde Geri Alma:** Son transfer 3 dakika içinde iptal edilebilir.
@@ -338,7 +330,21 @@ Her müşteri yalnızca kendi hesaplarını görebilir.
 
 ---
 
-### 6.7 Profilim
+### 6.7 Limitlerimi Yönet
+
+Hesap başına günlük ve tek işlem limitlerini değiştirme talebi gönderilir.
+
+1. Açılır listeden hesabı seçin → mevcut limitler otomatik dolar
+2. Yeni limit değerlerini girin (günlük çekim, günlük transfer, tek çekim, tek transfer)
+3. **Limit Değişikliği Talep Et** butonuna basın
+
+> **SMS simülasyonu:** Talep gönderilince "📱 SMS gönderildi" mesajı çıkar.  
+> Yeni limitler **24 saat sonra** otomatik olarak aktif olur — bir sonraki işlemde devreye girer.  
+> Bekleyen talep varsa panelde kalan süre gösterilir.
+
+---
+
+### 6.8 Profilim
 
 **Şifre Değiştirme:**
 1. Mevcut şifreyi girin
@@ -363,19 +369,23 @@ Her müşteri yalnızca kendi hesaplarını görebilir.
 | Aşama | İşlem No | Risk Seviyesi | Açıklama |
 |---|---|---|---|
 | Aşama 1 | 1–6 | 🟢 GÜVENLİ | Küçük normal işlemler |
-| Aşama 2 | 7–12 | 🟡 İZLENİYOR | Büyük tutarlar (≥50K), gece modu |
-| Aşama 3 | 13–22 | 🟠 RİSKLİ | Ani bakiye düşüşleri, velocity artışı |
+| Aşama 2 | 7–12 | 🟡 İZLENİYOR | Gece modu + ani boşalma |
+| Aşama 3 | 13–22 | 🟠 RİSKLİ | Hızlı boşaltma + velocity artışı |
 | Aşama 4 | 23–30 | 🔴 ŞÜPHELİ | Risk skoru 86'yı aşınca otomatik dondurma |
 
-### Risk Puanlama Sistemi
+### Risk Puanlama Sistemi (7 Kural)
 
-| Tetikleyici | Puan |
-|---|---|
-| Büyük işlem (≥ 50,000 ₺) | +20 |
-| Gece modu işlem (01:00–06:00, ≥ 10,000 ₺) | +15 |
-| Ani bakiye düşüşü (bakiyenin %95'i) | +15 |
-| Velocity: 5 dakikada ≥ 10 işlem | +30 |
-| Her temiz geçen gün | -5 (otomatik) |
+| Kural | Tetikleyici | Puan |
+|---|---|---|
+| Hızlı Boşaltma | 10 dk'da 3+ nakit çekim VE toplam ≥25,000 ₺ | +40 |
+| Gece Çekimi | 01:00–06:00 arası ≥5,000 ₺ işlem | +20 |
+| Ani Boşalma | Bakiyenin %90'ı tek işlemde (min 10,000 ₺) | +25 |
+| Yapılandırma | Son 10 işlemde 3+ kez 12,750–14,999 ₺ arası | +20 |
+| Müşteri Velocity | Tüm hesaplarda 5 dk'da eşik aşımı | +10/+20/+30 |
+| Günlük Limit | Günde 30+ işlem | +20 |
+| Yeni Alıcı | Hiç para gönderilmemiş hesaba ≥30,000 ₺ transfer | +30 |
+
+**Puan erimesi (decay):** Her olay günde 6–12 puan erir. Geçmişte yapılan riskli işlemler zamanla etkisini kaybeder.
 
 ### Risk Eşikleri
 
@@ -385,10 +395,11 @@ Her müşteri yalnızca kendi hesaplarını görebilir.
 | 31–60 | 🟡 İZLENİYOR |
 | 61–85 | 🟠 RİSKLİ |
 | 86–100 | 🔴 ŞÜPHELİ — hesap otomatik dondurulur |
+| <20 (OTOMATIK dondurma) | Otomatik olarak çözülür |
 
 ### Önemli Notlar
 
-- Simülasyon çalışırken **işlem logları** (`banka_kayit.txt`) sessiz moda alınır; gerçek kayıtlar kirlenmez
+- Simülasyon çalışırken sistem **bot moduna** geçer (`botModuAktif = true`) — gerçek veriler kirlenmez, otomatik kayıt çalışmaz
 - Simülasyon **kaydedilmez** — uygulama kapatılıp açılınca simülasyon verileri sıfırlanır
 - Sonuçları görmek için simülasyon bittikten sonra **"📋 Deneme Sonuçları"** butonuna basın
 
@@ -425,11 +436,12 @@ Admin hesabı kalıcıdır: `admin / admin123`
 | Kullanıcı engel/pasif/aktif ayarı | ✅ Evet |
 | Şifre sıfırlama (admin) | ✅ Evet |
 | Şifre değiştirme (müşteri) | ✅ Evet |
+| Limit değişim talebi (müşteri) | ✅ Evet |
 | Faiz oranı güncelleme | ❌ Manuel kayıt gerekir |
 | Döviz kuru güncelleme | ❌ Manuel kayıt gerekir |
-| Limit güncelleme | ❌ Manuel kayıt gerekir |
+| Limit güncelleme (admin) | ❌ Manuel kayıt gerekir |
 | Müşteri profili güncelleme | ❌ Manuel kayıt gerekir |
-| Para yatır/çek/transfer | ❌ Manuel kayıt gerekir |
+| Para yatır/çek/transfer | ✅ Evet |
 | Bot simülasyonu | ❌ Kaydedilmez (kasıtlı) |
 | Demo veri | ❌ Kaydedilmez (kasıtlı) |
 
@@ -441,7 +453,7 @@ Admin hesabı kalıcıdır: `admin / admin123`
 
 | Dosya | İçerik |
 |---|---|
-| `banka_durumu.dat` | Java serialization — müşteriler, hesaplar, kullanıcılar, risk skorları, limitler |
+| `banka_durumu.dat` | Java serialization — müşteriler, hesaplar, kullanıcılar, risk olayları, limitler, aktivite logları, bilinen alıcılar, bekleyen limit talepleri |
 | `banka_kayit.txt` | Metin log — tüm işlemlerin zaman damgalı kaydı |
 
 Her iki dosya da proje ana dizininde (`java_proje/`) otomatik oluşturulur.
@@ -485,12 +497,12 @@ Dosyayı silin ve uygulamayı yeniden açın. Sistem temizden başlar (yalnızca
 
 ### JavaFX Bulunamadı Hatası
 
-`launch.json` dosyasındaki `--module-path` yolunun `C:\Java\javafx-sdk-21\lib` klasörüne doğru işaret ettiğini kontrol edin.
+`.vscode/settings.json` dosyasındaki `java.project.referencedLibraries` yolunun `javafx-sdk-26.0.1/lib/*.jar` klasörüne doğru işaret ettiğini kontrol edin.
 
-### `class file has wrong version` Hatası
+### `banka_durumu.dat` Yüklenemiyor / Versiyon Uyuşmazlığı
 
-JavaFX SDK ile Java JDK sürümleri uyuşmuyor demektir.  
-Java 21 → JavaFX SDK **21** kullanılmalıdır (25 değil).
+`BankState` sınıfında yapısal değişiklik yapılırsa eski `.dat` dosyası yüklenemez.  
+Dosyayı silin ve uygulamayı yeniden açın. Yalnızca admin hesabı kalır.
 
 ---
 
@@ -503,10 +515,10 @@ Java 21 → JavaFX SDK **21** kullanılmalıdır (25 değil).
 4. [Opsiyonel] Raporlar → Demo Veri Yükle
 5. Müşteri Yönetimi → Yeni müşteri oluştur (kullanıcı adı + şifre gir)
 6. Hesap Yönetimi → Yeni hesap oluştur
-7. İşlemler → Para yatır / çek / transfer
+7. İşlemler → Para yatır / çek / transfer  (otomatik kaydedilir)
 8. Risk & Limitler → Limitleri ayarla, şüpheli hesapları yönet
-9. Raporlar → Bot Simülasyonu çalıştır
-10. Raporlar → Durumu Kaydet (kalıcı kayıt için)
+9. Raporlar → Bot Simülasyonu çalıştır  (gerçek veri kirlenmez)
+10. Müşteri girişi → Limitlerimi Yönet → limit değişikliği talep et (24s sonra aktif)
 ```
 
 ---
@@ -770,18 +782,24 @@ Kalıtım: Serializable
 `banka_durumu.dat` dosyasına kaydedilen ve oradan yüklenen tek nesnedir. İçinde tüm sistem durumu bulunur:
 
 ```
-BankState içeriği:
-├── List<Customer>             musteriler
-├── List<Account>              hesaplar
-├── Map<String, Kullanici>     kullanicilar
-├── Set<String>                suphelihHesaplar
-├── Map<String, SupheSebebi>   supheSebebleri
-├── Map<String, HesapLimiti>   hesapLimitleri
-├── Map<String, Integer>       riskSkorlari
-├── Map<String, LocalDate>     skorGuncelleme
-├── int                        musteriSayaci
-├── int                        hesapSayaci
-└── int                        islemSayaci
+BankState içeriği (serialVersionUID 7L):
+├── List<Customer>                      musteriler
+├── List<Account>                       hesaplar
+├── Map<String, Kullanici>              kullanicilar
+├── Set<String>                         suphelihHesaplar
+├── Map<String, SupheSebebi>            supheSebebleri
+├── Map<String, HesapLimiti>            hesapLimitleri
+├── Set<String>                         demoMusteriler
+├── List<RiskOlayKaydi>                 riskOlayKayitlari
+├── Map<String, MusteriRiskProfili>     musteriProfilleri
+├── Map<String, DondurmaKaydi>          dondurmaKayitlari
+├── Map<String, KullaniciKategorisi>    kullaniciKategorileri
+├── List<ActivityLog>                   aktiviteLoglari
+├── Map<String, Set<String>>            bilinenAlicilar
+├── Map<String, BekleyenLimitDegisimi>  bekleyenLimitler
+├── int                                 musteriSayaci
+├── int                                 hesapSayaci
+└── int                                 islemSayaci
 ```
 
 Sayaçlar ID üretimi için kritiktir — yüklenmezse ID'ler sıfırdan başlar, çakışma olur.
@@ -912,7 +930,10 @@ Tüm iş mantığının merkezi. UI katmanı bu sınıf üzerinden her şeyi yap
 | `kimlikDogrulama` | `KimlikDogrulama` | Kullanıcı işlemleri |
 | `dinleyiciler` | `List<RiskDinleyici>` | Observer listesi |
 | `bekleyenIslemler` | `Map<String, BekleyenIslem>` | Geri alınabilir işlemler (3 dk) |
-| `demoMusteri` | `Set<String>` | Demo müşteri ID'leri ([DEMO] etiketi için) |
+| `bekleyenLimitler` | `Map<String, BekleyenLimitDegisimi>` | 24 saatlik limit talepleri |
+| `logServisi` | `AktiviteLogServisi` | Aktivite log yönetimi |
+| `demoMusteri` | `Set<String>` | Demo müşteri ID'leri |
+| `botModuAktif` | `boolean` | true iken otomatikKaydet() çalışmaz |
 | `musteriSayaci` | `int` | MUS ID üretimi |
 | `hesapSayaci` | `int` | HSP ID üretimi |
 | `islemSayaci` | `int` | TRX ID üretimi |
@@ -971,42 +992,53 @@ Tür       : class
 Uygulanan : IRiskCalculatable
 ```
 
-Tüm risk hesaplamalarının merkezi. Günlük limitler, velocity check, gece modu, risk skoru burada hesaplanır.
+Tüm risk hesaplamalarının merkezi. Event-tabanlı skorlama, decay sistemi, velocity, dondurma yönetimi burada yapılır.
 
 **Sabit Limitler:**
 
 ```
-Para yatırma maks  : 100,000 ₺
-Para çekme maks    :  50,000 ₺
-Transfer maks      :  50,000 ₺
-Günlük çekim       :  20,000 ₺
-Günlük transfer    :  30,000 ₺
-Gece modu eşiği    :  10,000 ₺ (01:00–06:00)
-Ani düşüş oranı    :  %95 (bakiyenin %95'ini tek çekimde çekmek)
-Velocity eşiği     :  5 dakikada 10 işlem
+Para yatırma maks     : 100,000 ₺
+Para çekme maks       :  50,000 ₺
+Transfer maks         :  50,000 ₺
+Günlük çekim          : 100,000 ₺
+Günlük transfer       : 100,000 ₺
+Gece modu eşiği       :   5,000 ₺ (01:00–06:00)
+Ani düşüş oranı       :  %90 (bakiyenin %90'ı tek çekimde, min 10,000 ₺)
+Hızlı boşaltma        : 10 dk'da 3+ çekim VE toplam ≥25,000 ₺
+Yeni alıcı büyük eşik :  30,000 ₺
+Yeni alıcı orta eşik  :  10,000 ₺
 ```
 
 **Risk Skoru Eşikleri:**
 
 ```
-SKOR_IZLEME = 31   → 🟡 İzleniyor
-SKOR_RISKLI = 61   → 🟠 Riskli
-SKOR_DONDUR = 86   → 🔴 Otomatik dondur
+SKOR_IZLEME     = 31   → 🟡 İzleniyor
+SKOR_RISKLI     = 61   → 🟠 Riskli
+SKOR_DONDUR     = 86   → 🔴 Otomatik dondur
+SKOR_OTOMATIK_COZ = 20 → Otomatik dondurma kendiliğinden çözülür
 ```
 
-**Puan ekleme kaynaklarına göre:**
+**Event-tabanlı skorlama:** Her risk olayı `RiskOlayKaydi` olarak kaydedilir. Skor hesaplanırken her olayın günlük decay'i düşülür. Puan doğrudan saklanmaz — event log'dan türetilir.
 
-| Tetikleyici | Puan | Metot |
+**Puan ve decay tablosu (`IslemRiskAgirlik`):**
+
+| Tür | Çarpan | Günlük Decay |
 |---|---|---|
-| Büyük işlem ≥ 50K ₺ | +20 | `islemSonrasiRiskKontrol` |
-| Gece modu ≥ 10K ₺ | +15 | `geceModuRisklimi()` |
-| Ani düşüş ≥ %95 | +15 | `aniDususVarMi()` |
-| Velocity ≥ 10/5dk | +30 | `kisaVadeliCokIslemMi()` |
-| Her temiz geçen gün | −5 | `getRiskSkoru()` içinde otomatik |
+| NAKIT_CEKIM | ×1.0 | 6 puan/gün |
+| DIS_TRANSFER | ×1.0 | 6 puan/gün |
+| IC_TRANSFER | ×0.5 | 10 puan/gün |
+| PARA_YATIRMA | ×0.1 | 12 puan/gün |
+| DOVIZ_ISLEM | ×1.0 | 6 puan/gün |
+| KREDI_CEKIM | ×0.8 | 7 puan/gün |
+| DAVRANISSAL | ×1.0 | 6 puan/gün |
 
-**Günlük sıfırlama:** `gunlukCekimler`, `gunlukTransferler` tarih değişince otomatik sıfırlanır.
+**Müşteri bulaşma modeli:** Hesap puanının %25'i müşteri profiline eklenir. Hesap skoru hiçbir zaman müşteri skorunun %35'inin altına düşmez. Müşteri profili günde 3 puan erir.
 
-**Sliding window (velocity):** Son 5 dakikanın işlem zamanları `kisaVadeliIslemler` listesinde tutulur; 10 dakika geçmiş kayıtlar otomatik temizlenir.
+**Sliding window:** `kisaVadeliIslemler` (hesap bazlı) ve `kisaVadeliMusteriIslemler` (müşteri bazlı) listelerinde son 10 dakikanın zamanları tutulur.
+
+**Yeni alıcı tespiti:** `bilinenAlicilar: Map<String, Set<String>>` — her müşterinin daha önce para gönderdiği hesap ID'leri kalıcı olarak saklanır.
+
+**Çift sayım önleme:** Yapılandırma 24 saatlik cooldown, günlük limit günde yalnızca bir kez tetiklenir.
 
 ---
 
@@ -1204,6 +1236,7 @@ Müşteri kullanıcıların gördüğü 7 sekmeli panel. Müşteri yalnızca `ku
 | `transferSekme()` | Transfer formu + geri alma butonu |
 | `islemGecmisiSekme()` | Filtrelenebilir işlem geçmişi + PDF export |
 | `krediSekme()` | Kredi kullanım + ödeme formları |
+| `limitYonetimSekme()` | Limit değişim talebi (24s gecikme + SMS simülasyonu) |
 | `profilimSekme()` | Şifre değiştirme, profil bilgileri |
 
 **Observer kaydı:** Constructor'da `BankController.dinleyiciEkle()` ile kayıt olur — kendi müşteri ID'siyle ilgili risk olaylarını dinler, toast bildirimi gösterir.
@@ -1320,9 +1353,10 @@ Tüm JavaFX bileşenlerinin görsel stilini tanımlar. Önemli CSS sınıfları:
 | **Template Method** | `Account` abstract sınıfı | `paraYatir`, `paraCek` şablonu sabit; `getHesapTuru` alt sınıfta |
 | **Strategy** | `IRiskCalculatable` | Her hesap türü kendi risk puanını farklı hesaplar |
 | **Singleton-benzeri** | `HashUtil` | Static metodlar, instantiate edilemez |
-| **DTO (Data Transfer Object)** | `BankState`, `RiskOlayi` | Katmanlar arası veri taşıma nesneleri |
+| **DTO (Data Transfer Object)** | `BankState`, `RiskOlayi`, `ActivityLog` | Katmanlar arası veri taşıma nesneleri |
 | **Factory yöntemi** | `BankController.hesapOlustur()` | `switch` ile türe göre doğru `Account` alt sınıfı oluşturulur |
+| **Event Sourcing** | `RiskOlayKaydi` log listesi | Skor event'lerden türetilir, decay uygulanır, geri alma desteklenir |
 
 ---
 
-*OOP Bankacılık Sistemi — Java 21 + JavaFX 21*
+*OOP Bankacılık Sistemi — Java 25 + JavaFX 26.0.1*
