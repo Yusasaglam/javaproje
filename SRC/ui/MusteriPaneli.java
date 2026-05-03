@@ -61,8 +61,8 @@ public class MusteriPaneli extends BorderPane {
     private TextField        limitGunlukCekimField, limitGunlukTransferField;
     private TextField        limitTekCekimField,    limitTekTransferField;
 
-    // Geri alma
-    private Button pcGeriAlBtn, trGeriAlBtn;
+    // Geri alma / onaylama
+    private Button pcGeriAlBtn, trGeriAlBtn, trOnaylaBtn;
     private javafx.animation.Timeline geriAlTimeline;
     private boolean limitYenileniyor = false;
 
@@ -272,17 +272,25 @@ public class MusteriPaneli extends BorderPane {
         btn.setMaxWidth(Double.MAX_VALUE);
         btn.setOnAction(e -> transferYap());
         trKaynakCombo.setOnAction(e -> limitGuncelle(trKaynakCombo, trLimitLabel, false));
-        trGeriAlBtn = UITema.tehlikeButon("↩ Geri Al (3:00)");
+
+        trOnaylaBtn = UITema.anaButon("✓ Onayla");
+        trGeriAlBtn = UITema.tehlikeButon("↩ İptal Et");
+        trOnaylaBtn.setMaxWidth(Double.MAX_VALUE);
         trGeriAlBtn.setMaxWidth(Double.MAX_VALUE);
-        trGeriAlBtn.setVisible(false);
+        javafx.scene.layout.HBox onayBox = new javafx.scene.layout.HBox(8, trOnaylaBtn, trGeriAlBtn);
+        javafx.scene.layout.HBox.setHgrow(trOnaylaBtn, javafx.scene.layout.Priority.ALWAYS);
+        javafx.scene.layout.HBox.setHgrow(trGeriAlBtn, javafx.scene.layout.Priority.ALWAYS);
+        onayBox.setVisible(false);
+        onayBox.setManaged(false);
+
         kart.getChildren().addAll(
             UITema.etiket("Kaynak Hesabınız:"), trKaynakCombo,
             UITema.etiket("Hedef Hesap No:"), trHedefField,
             UITema.etiket("Miktar (₺):"), trMiktarField,
-            trLimitLabel, btn, trGeriAlBtn, trDurum
+            trLimitLabel, btn, onayBox, trDurum
         );
         VBox.setMargin(btn, new Insets(14, 0, 0, 0));
-        VBox.setMargin(trGeriAlBtn, new Insets(6, 0, 0, 0));
+        VBox.setMargin(onayBox, new Insets(6, 0, 0, 0));
 
         StackPane sp = new StackPane(kart);
         sp.setStyle("-fx-background-color: #f0f3f9;");
@@ -631,8 +639,8 @@ public class MusteriPaneli extends BorderPane {
             if (!riskler.isEmpty() && !onayDiyalogu(riskler, m)) return;
             if (kontrolcu.transferYap(kId, hId, m)) {
                 BankController.BekleyenIslem bekleyen = kontrolcu.getSonBekleyenIslem();
-                UITema.durumGoster(trDurum, "Transfer başarılı: " + tl(m), true);
-                if (bekleyen != null) geriAlBaslat(bekleyen, trDurum, trGeriAlBtn);
+                UITema.durumGoster(trDurum, "⏳ Transfer beklemede — onaylayın veya iptal edin.", true);
+                if (bekleyen != null) transferOnayBekle(bekleyen, trDurum);
                 trHedefField.clear(); trMiktarField.clear(); combolarYenile(); hesaplarimYenile();
             } else UITema.durumGoster(trDurum, "Transfer başarısız: Şüpheli hesap veya hedef bulunamadı.", false);
         } catch (YetersizBakiyeException e) {
@@ -1057,6 +1065,70 @@ public class MusteriPaneli extends BorderPane {
             } else {
                 UITema.durumGoster(durumLabel, "Geri alma süresi doldu.", false);
             }
+        });
+    }
+
+    /**
+     * Bekleyen transfer için "Onayla / İptal Et" butonlarını gösterir.
+     * 3 dakika içinde onay gelmezse transfer otomatik onaylanır.
+     */
+    private void transferOnayBekle(BankController.BekleyenIslem bekleyen, Label durumLabel) {
+        if (geriAlTimeline != null) geriAlTimeline.stop();
+
+        javafx.scene.Parent parent = trOnaylaBtn.getParent();
+        parent.setVisible(true);
+        parent.setManaged(true);
+        trOnaylaBtn.setText("✓ Onayla");
+
+        final long[] kalan = {bekleyen.kalanSaniye()};
+
+        Runnable kapat = () -> {
+            parent.setVisible(false);
+            parent.setManaged(false);
+            trGeriAlBtn.setText("↩ İptal Et");
+            if (geriAlTimeline != null) geriAlTimeline.stop();
+        };
+
+        geriAlTimeline = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.seconds(1), e -> {
+                kalan[0]--;
+                if (kalan[0] <= 0) {
+                    // Süre doldu → otomatik onayla
+                    kontrolcu.transferOnayla(bekleyen.islemId);
+                    kapat.run();
+                    UITema.durumGoster(durumLabel, "Transfer otomatik onaylandı: " + tl(bekleyen.miktar), true);
+                    combolarYenile(); hesaplarimYenile();
+                } else {
+                    long d = kalan[0] / 60, s = kalan[0] % 60;
+                    trGeriAlBtn.setText(String.format("↩ İptal Et (%d:%02d)", d, s));
+                }
+            })
+        );
+        geriAlTimeline.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        geriAlTimeline.play();
+        long d = kalan[0] / 60, s = kalan[0] % 60;
+        trGeriAlBtn.setText(String.format("↩ İptal Et (%d:%02d)", d, s));
+
+        trOnaylaBtn.setOnAction(ev -> {
+            BankController.BekleyenIslem sonuc = kontrolcu.transferOnayla(bekleyen.islemId);
+            kapat.run();
+            if (sonuc != null) {
+                UITema.durumGoster(durumLabel, "Transfer onaylandı: " + tl(sonuc.miktar), true);
+            } else {
+                UITema.durumGoster(durumLabel, "Onaylama başarısız.", false);
+            }
+            combolarYenile(); hesaplarimYenile();
+        });
+
+        trGeriAlBtn.setOnAction(ev -> {
+            BankController.BekleyenIslem sonuc = kontrolcu.geriAl(bekleyen.islemId);
+            kapat.run();
+            if (sonuc != null) {
+                UITema.durumGoster(durumLabel, "Transfer iptal edildi: " + tl(sonuc.miktar), true);
+            } else {
+                UITema.durumGoster(durumLabel, "İptal başarısız.", false);
+            }
+            combolarYenile(); hesaplarimYenile();
         });
     }
 }

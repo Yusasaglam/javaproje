@@ -1,6 +1,7 @@
 package model;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
 public class Kullanici implements Serializable {
 
@@ -15,6 +16,7 @@ public class Kullanici implements Serializable {
     private int basarisizGirisSayisi;
     private boolean engelliMi;
     private boolean pasifMi;
+    private LocalDateTime engellemeSaati;
 
     public Kullanici(String kullaniciAdi, String sifre, Rol rol, String musteriId) {
         this.kullaniciAdi = kullaniciAdi;
@@ -28,8 +30,8 @@ public class Kullanici implements Serializable {
 
     public void basarisizGirisArtir() { basarisizGirisSayisi++; }
     public void girisBasarisizSayisiniSifirla() { basarisizGirisSayisi = 0; }
-    public void engelleHesap() { engelliMi = true; }
-    public void engelKaldir() { engelliMi = false; basarisizGirisSayisi = 0; }
+    public void engelleHesap() { engelliMi = true; engellemeSaati = LocalDateTime.now(); }
+    public void engelKaldir() { engelliMi = false; basarisizGirisSayisi = 0; engellemeSaati = null; }
     public void pasifYap()     { pasifMi = true; }
     public void aktifYap()     { pasifMi = false; }
 
@@ -41,4 +43,5 @@ public class Kullanici implements Serializable {
     public int getBasarisizGirisSayisi() { return basarisizGirisSayisi; }
     public boolean isEngelliMi() { return engelliMi; }
     public boolean isPasifMi()   { return pasifMi; }
+    public LocalDateTime getEngellemeSaati() { return engellemeSaati; }
 }

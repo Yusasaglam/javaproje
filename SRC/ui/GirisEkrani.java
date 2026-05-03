@@ -39,6 +39,14 @@ public class GirisEkrani {
         goster();
     }
 
+    /** Çıkış sonrası mevcut oturumu yeniden kullan — kilit/state kaybolmaz. */
+    public GirisEkrani(Stage stage, BankController kontrolcu, KimlikDogrulama kimlikDogrulama) {
+        this.stage           = stage;
+        this.kontrolcu       = kontrolcu;
+        this.kimlikDogrulama = kimlikDogrulama;
+        goster();
+    }
+
     private void goster() {
         HBox kok = new HBox();
         kok.setPrefSize(1000, 640);
@@ -302,12 +310,26 @@ public class GirisEkrani {
 
         Kullanici kullanici = kimlikDogrulama.girisYap(ad, sifre);
         if (kullanici == null) {
-            String mesaj = kimlikDogrulama.engelliMi(ad)
-                    ? "⛔  Hesap kilitlendi. Yönetici ile iletişime geçin."
-                    : kimlikDogrulama.pasifMi(ad)
-                    ? "⛔  Hesap pasif durumda."
-                    : "✗  Hatalı kullanıcı adı veya şifre.";
-            hataGoster(mesaj);
+            if (kimlikDogrulama.engelliMi(ad)) {
+                long kalan = kimlikDogrulama.kalanBeklemeSaniyesi(ad);
+                String mesaj = kalan > 0
+                        ? String.format("⛔  Hesap kilitlendi. %d dk %d sn sonra tekrar deneyin.", kalan / 60, kalan % 60)
+                        : "⛔  Hesap kilitlendi. Yönetici ile iletişime geçin.";
+                hataGoster(mesaj);
+                kontrolcu.durumKaydet(DURUM_DOSYASI);
+            } else if (kimlikDogrulama.pasifMi(ad)) {
+                hataGoster("⛔  Hesap pasif durumda.");
+            } else {
+                hataGoster("✗  Hatalı kullanıcı adı veya şifre.");
+                if (kimlikDogrulama.kullaniciVarMi(ad)) {
+                    kontrolcu.basarisizGirisKaydet(ad);
+                    if (kimlikDogrulama.engelliMi(ad)) {
+                        long kalan = kimlikDogrulama.kalanBeklemeSaniyesi(ad);
+                        hataGoster(String.format("⛔  3 hatalı deneme. %d dk %d sn bekleyin.", kalan / 60, kalan % 60));
+                        kontrolcu.durumKaydet(DURUM_DOSYASI);
+                    }
+                }
+            }
             sifreField.clear();
         } else {
             hataGizle();

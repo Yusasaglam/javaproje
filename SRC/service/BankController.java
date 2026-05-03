@@ -222,6 +222,7 @@ public class BankController implements IBankService {
                     "Günlük çekim limiti aşıldı",
                     riskMotoru.getGunlukCekimLimit(hesapId), miktar);
         }
+        boolean suphelihOncesi = suphelihHesaplar.contains(hesapId);
         int riskOncesi = getRiskSkoru(hesapId);
         String islemId = String.format("TRX%08d", ++islemSayaci);
         if (!hesap.paraCek(miktar)) {
@@ -234,6 +235,14 @@ public class BankController implements IBankService {
         kaydedici.kaydet("PARA_CEKILDI: " + islemId + " | " + hesapId + " | -" + miktar);
         sonBekleyenIslem = null;
         String kurallar = islemSonrasiRiskKontrol(hesapId, hesap.getSahibiId(), hesap.getBakiye() + miktar, miktar, islemId, IslemRiskAgirlik.NAKIT_CEKIM, null);
+        // Eğer bu işlem hesabı dondurdu ise parayı iade et ve işlemi iptal et
+        if (!suphelihOncesi && suphelihHesaplar.contains(hesapId)) {
+            hesap.paraYatir(miktar);
+            hesap.getIslemler().remove(islem);
+            kaydedici.kaydet("PARA_CEKME_BLOKE: " + islemId + " | risk dondurma tetiklendi, işlem iptal");
+            otomatikKaydet();
+            return false;
+        }
         int riskSonrasi = getRiskSkoru(hesapId);
         logEkle(hesap.getSahibiId(), hesapId, ActivityLog.IslemTipi.PARA_CEKME, miktar,
                 riskOncesi, riskSonrasi - riskOncesi, riskSonrasi, kurallar,
@@ -262,26 +271,37 @@ public class BankController implements IBankService {
                     "Transfer limiti aşıldı",
                     riskMotoru.getGunlukTransferLimit(kaynakId), miktar);
         }
+        boolean suphelihOncesi = suphelihHesaplar.contains(kaynakId);
         int riskOncesi = getRiskSkoru(kaynakId);
         double bakiyeOncesi = kaynak.getBakiye();
         if (!kaynak.paraCek(miktar)) {
             throw new model.YetersizBakiyeException(kaynak.getBakiye(), miktar);
         }
-        hedef.paraYatir(miktar);
+        // Para kaynaktan düşer ama hedefe henüz GİTMEZ — onay bekler
         String islemId = String.format("TRX%08d", ++islemSayaci);
         riskMotoru.transferKaydet(kaynakId, miktar, kaynak.getSahibiId());
         Transfer islem = new Transfer(islemId, miktar, kaynakId, hedefId);
         kaynak.islemEkle(islem);
-        hedef.islemEkle(islem);
         islemDeposu.kaydet(islem);
-        kaydedici.kaydet("TRANSFER_YAPILDI: " + islemId + " | " + kaynakId + " -> " + hedefId + " | " + miktar);
-        sonBekleyenIslem = new BekleyenIslem(islemId, kaynakId, hedefId, miktar, "TRANSFER");
+        kaydedici.kaydet("TRANSFER_BEKLEMEDE: " + islemId + " | " + kaynakId + " -> " + hedefId + " | " + miktar);
+        sonBekleyenIslem = new BekleyenIslem(islemId, kaynakId, hedefId, miktar, "BEKLEYEN_TRANSFER");
         bekleyenIslemler.put(islemId, sonBekleyenIslem);
         String kurallar = islemSonrasiRiskKontrol(kaynakId, kaynak.getSahibiId(), bakiyeOncesi, miktar, islemId, IslemRiskAgirlik.DIS_TRANSFER, hedefId);
+        // Risk dondurma tetiklendiyse parayı kaynağa iade et (hedefe hiç gitmedi)
+        if (!suphelihOncesi && suphelihHesaplar.contains(kaynakId)) {
+            kaynak.paraYatir(miktar);
+            riskMotoru.transferGeriAl(kaynakId, miktar);
+            kaynak.getIslemler().remove(islem);
+            bekleyenIslemler.remove(islemId);
+            sonBekleyenIslem = null;
+            kaydedici.kaydet("TRANSFER_BLOKE: " + islemId + " | risk dondurma tetiklendi, işlem iptal");
+            otomatikKaydet();
+            return false;
+        }
         int riskSonrasi = getRiskSkoru(kaynakId);
         logEkle(kaynak.getSahibiId(), kaynakId, ActivityLog.IslemTipi.TRANSFER, miktar,
                 riskOncesi, riskSonrasi - riskOncesi, riskSonrasi, kurallar,
-                String.format("Transfer: %,.2f ₺ → %s", miktar, hedefId));
+                String.format("Transfer beklemede: %,.2f ₺ → %s", miktar, hedefId));
         otomatikKaydet();
         return true;
     }
@@ -293,11 +313,12 @@ public class BankController implements IBankService {
         List<String> tetiklenen = new ArrayList<>();
         Account hesap = hesapDeposu.idIleGetir(hesapId);
 
-        // ── KURAL 1: Kart hırsızlığı — 10 dk'da 3+ çekim VE toplam ≥25K ────────
+        // ── KURAL 1: Kart hırsızlığı / hesap ele geçirme — 10 dk'da 3+ çekim/transfer VE toplam ≥25K
         // Sıradan maaş çekimi (tek seferlik büyük çekim) bunu TETIKLEMEZ.
-        // Tetiklemesi için hırsız gibi art arda birden fazla çekim gerekir.
-        if (agirlik == IslemRiskAgirlik.NAKIT_CEKIM && riskMotoru.hizliBoşaltmaMi(hesapId)) {
-            riskMotoru.skorEkle(islemId, hesapId, musteriId, 40, IslemRiskAgirlik.NAKIT_CEKIM);
+        // Tetiklemesi için hırsız gibi art arda birden fazla işlem gerekir.
+        if ((agirlik == IslemRiskAgirlik.NAKIT_CEKIM || agirlik == IslemRiskAgirlik.DIS_TRANSFER)
+                && riskMotoru.hizliBoşaltmaMi(hesapId)) {
+            riskMotoru.skorEkle(islemId, hesapId, musteriId, 40, agirlik);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.COK_FAZLA_ISLEM, miktar,
                     String.format("Hızlı hesap boşaltma: 10 dk'da %d çekim, toplam %.0f ₺",
                             riskMotoru.kisaVadeliCekimAdedi(hesapId), riskMotoru.kisaVadeliToplamCekim(hesapId)));
@@ -462,6 +483,16 @@ public class BankController implements IBankService {
     public double kalanTransferLimiti(String hesapId) { return riskMotoru.kalanTransferLimiti(hesapId); }
     public HesapLimiti varsayilanLimit()             { return riskMotoru.varsayilanLimit(); }
 
+    public void basarisizGirisKaydet(String kullaniciAdi) {
+        Kullanici k = kimlikDogrulama.getKullanicilar().get(kullaniciAdi);
+        if (k == null || k.getMusteriId() == null) return;
+        Customer musteri = musteriDeposu.idIleGetir(k.getMusteriId());
+        if (musteri == null) return;
+        for (Account hesap : musteri.getHesaplar()) {
+            riskMotoru.basarisizGirisKaydet(hesap.getHesapId(), k.getMusteriId());
+        }
+    }
+
     // ── Sorgulama ─────────────────────────────────────────────────────────────
 
     @Override public Customer       getMusteri(String id) { return musteriDeposu.idIleGetir(id); }
@@ -550,6 +581,10 @@ public class BankController implements IBankService {
                 new ArrayList<>(logServisi.getLoglar()),
                 new HashMap<>(riskMotoru.getBilinenAlicilar()),
                 new HashMap<>(bekleyenLimitler),
+                new HashMap<>(riskMotoru.getGunlukTransferler()),
+                new HashMap<>(riskMotoru.getGunlukTransferTarihleri()),
+                new HashMap<>(riskMotoru.getGunlukCekimler()),
+                new HashMap<>(riskMotoru.getGunlukCekimTarihleri()),
                 musteriSayaci, hesapSayaci, islemSayaci);
         Serializer.serialize(durum, dosyaYolu);
         kaydedici.kaydet("DURUM_KAYDEDILDI: " + dosyaYolu);
@@ -584,6 +619,11 @@ public class BankController implements IBankService {
         riskMotoru.alicilariYukle(durum.getBilinenAlicilar());
         bekleyenLimitler.clear();
         if (durum.getBekleyenLimitler() != null) bekleyenLimitler.putAll(durum.getBekleyenLimitler());
+        riskMotoru.gunlukVerileriYukle(
+                durum.getGunlukTransferler(),
+                durum.getGunlukTransferTarihleri(),
+                durum.getGunlukCekimler(),
+                durum.getGunlukCekimTarihleri());
 
         demoMusteri.clear();
         if (durum.getDemoMusteriler() != null) demoMusteri.addAll(durum.getDemoMusteriler());
@@ -762,7 +802,19 @@ public class BankController implements IBankService {
         BekleyenIslem bekleyen = bekleyenIslemler.get(islemId);
         if (bekleyen == null || !bekleyen.geriAlinabilirMi()) return null;
         try {
-            if ("TRANSFER".equals(bekleyen.tip)) {
+            if ("BEKLEYEN_TRANSFER".equals(bekleyen.tip)) {
+                // Para zaten hedefe gitmedi — sadece kaynağa iade et
+                Account kaynak = hesapDeposu.idIleGetir(bekleyen.kaynakId);
+                if (kaynak != null) {
+                    kaynak.paraYatir(bekleyen.miktar);
+                    riskMotoru.transferGeriAl(bekleyen.kaynakId, bekleyen.miktar);
+                    riskMotoru.islemRiskOlaylariniIptalEt(islemId);
+                    int skorSonra = getRiskSkoru(bekleyen.kaynakId);
+                    logEkle(kaynak.getSahibiId(), bekleyen.kaynakId, ActivityLog.IslemTipi.GERI_AL,
+                            bekleyen.miktar, skorSonra, 0, skorSonra, "Transfer iptal",
+                            String.format("Bekleyen transfer iptal edildi: %,.2f ₺", bekleyen.miktar));
+                }
+            } else if ("TRANSFER".equals(bekleyen.tip)) {
                 Account kaynak = hesapDeposu.idIleGetir(bekleyen.kaynakId);
                 Account hedef  = hesapDeposu.idIleGetir(bekleyen.hedefId);
                 if (kaynak != null && hedef != null && hedef.getBakiye() >= bekleyen.miktar) {
@@ -780,6 +832,31 @@ public class BankController implements IBankService {
             if (sonBekleyenIslem != null && sonBekleyenIslem.islemId.equals(islemId))
                 sonBekleyenIslem = null;
             kaydedici.kaydet("ISLEM_GERI_ALINDI: " + islemId + " | " + bekleyen.tip + " | " + bekleyen.miktar);
+            otomatikKaydet();
+            return bekleyen;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Bekleyen transferi onaylar — para şimdi hedefe gönderilir. */
+    public BekleyenIslem transferOnayla(String islemId) {
+        BekleyenIslem bekleyen = bekleyenIslemler.get(islemId);
+        if (bekleyen == null || !"BEKLEYEN_TRANSFER".equals(bekleyen.tip)) return null;
+        try {
+            Account kaynak = hesapDeposu.idIleGetir(bekleyen.kaynakId);
+            Account hedef  = hesapDeposu.idIleGetir(bekleyen.hedefId);
+            if (kaynak == null || hedef == null) return null;
+            hedef.paraYatir(bekleyen.miktar);
+            hedef.islemEkle(new Transfer(islemId, bekleyen.miktar, bekleyen.kaynakId, bekleyen.hedefId));
+            bekleyenIslemler.remove(islemId);
+            if (sonBekleyenIslem != null && sonBekleyenIslem.islemId.equals(islemId))
+                sonBekleyenIslem = null;
+            kaydedici.kaydet("TRANSFER_ONAYLANDI: " + islemId + " | " + bekleyen.kaynakId + " -> " + bekleyen.hedefId + " | " + bekleyen.miktar);
+            int skor = getRiskSkoru(bekleyen.kaynakId);
+            logEkle(kaynak.getSahibiId(), bekleyen.kaynakId, ActivityLog.IslemTipi.TRANSFER,
+                    bekleyen.miktar, skor, 0, skor, "",
+                    String.format("Transfer onaylandı: %,.2f ₺ → %s", bekleyen.miktar, bekleyen.hedefId));
             otomatikKaydet();
             return bekleyen;
         } catch (Exception e) {

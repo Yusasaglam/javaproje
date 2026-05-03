@@ -21,6 +21,8 @@ public class MainFrame {
     public MainFrame(Stage stage, Kullanici kullanici,
                      BankController kontrolcu, KimlikDogrulama kimlikDogrulama) {
 
+        final KimlikDogrulama kd = kimlikDogrulama;
+        final BankController  kc = kontrolcu;
         boolean yonetici = kullanici.getRol() == Kullanici.Rol.YONETICI;
 
         // ── Üst başlık şeridi ─────────────────────────────────────────────────
@@ -132,7 +134,7 @@ public class MainFrame {
         ));
         cikisBtn.setOnAction(e -> {
             stage.close();
-            new GirisEkrani(stage);
+            new GirisEkrani(stage, kc, kd);
         });
 
         sag.getChildren().addAll(avatarPane, kullaniciBilgi, ayrac2, cikisBtn);

@@ -239,6 +239,11 @@ public class RiskEngine implements IRiskCalculatable {
     public void transferKaydet(String hesapId, double miktar, String musteriId) {
         guncelle(hesapId, miktar, gunlukTransferler, gunlukTransferTarihleri);
         islemKaydet(hesapId, musteriId);
+        long simdi  = System.currentTimeMillis();
+        long pencere = KISA_SURE_DAKIKA * 2 * 60_000L;
+        List<double[]> c = kisaVadeliCekimler.computeIfAbsent(hesapId, k -> new ArrayList<>());
+        c.removeIf(e -> simdi - (long) e[0] > pencere);
+        c.add(new double[]{simdi, miktar});
     }
 
     public void transferGeriAl(String hesapId, double miktar) {
@@ -460,6 +465,32 @@ public class RiskEngine implements IRiskCalculatable {
     public void ozelLimitleriYukle(Map<String, HesapLimiti> limitler) {
         ozelLimitler.clear();
         if (limitler != null) ozelLimitler.putAll(limitler);
+    }
+
+    // ── Günlük izler — getter ve yükleyici ───────────────────────────────────
+
+    public Map<String, Double>    getGunlukTransferler()       { return Collections.unmodifiableMap(gunlukTransferler); }
+    public Map<String, LocalDate> getGunlukTransferTarihleri() { return Collections.unmodifiableMap(gunlukTransferTarihleri); }
+    public Map<String, Double>    getGunlukCekimler()          { return Collections.unmodifiableMap(gunlukCekimler); }
+    public Map<String, LocalDate> getGunlukCekimTarihleri()    { return Collections.unmodifiableMap(gunlukCekimTarihleri); }
+
+    public void gunlukVerileriYukle(Map<String, Double> transferler,
+                                    Map<String, LocalDate> transferTarihleri,
+                                    Map<String, Double> cekimler,
+                                    Map<String, LocalDate> cekimTarihleri) {
+        gunlukTransferler.clear();
+        if (transferler != null) gunlukTransferler.putAll(transferler);
+        gunlukTransferTarihleri.clear();
+        if (transferTarihleri != null) gunlukTransferTarihleri.putAll(transferTarihleri);
+        gunlukCekimler.clear();
+        if (cekimler != null) gunlukCekimler.putAll(cekimler);
+        gunlukCekimTarihleri.clear();
+        if (cekimTarihleri != null) gunlukCekimTarihleri.putAll(cekimTarihleri);
+    }
+
+    /** Hatalı şifre denemesi — hesap riski 15 puan artar (DAVRANISSAL ağırlık). */
+    public void basarisizGirisKaydet(String hesapId, String musteriId) {
+        skorEkle("LOGIN_FAIL", hesapId, musteriId, 15, IslemRiskAgirlik.DAVRANISSAL);
     }
 
     // ── Kullanıcı kategorisi ─────────────────────────────────────────────────

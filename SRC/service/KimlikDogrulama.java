@@ -3,6 +3,8 @@ package service;
 import model.Kullanici;
 import persistence.FileLogger;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,8 +34,14 @@ public class KimlikDogrulama {
             return null;
         }
         if (kullanici.isEngelliMi()) {
-            kaydedici.kaydet("GIRIS_ENGELLENDI: " + kullaniciAdi);
-            return null;
+            LocalDateTime saati = kullanici.getEngellemeSaati();
+            if (saati != null && LocalDateTime.now().isAfter(saati.plusMinutes(10))) {
+                kullanici.engelKaldir();
+                kaydedici.kaydet("ENGEL_OTOMATIK_KALDIRILDI: " + kullaniciAdi);
+            } else {
+                kaydedici.kaydet("GIRIS_ENGELLENDI: " + kullaniciAdi);
+                return null;
+            }
         }
         if (kullanici.isPasifMi()) {
             kaydedici.kaydet("GIRIS_PASIF_HESAP: " + kullaniciAdi);
@@ -82,6 +90,17 @@ public class KimlikDogrulama {
     public boolean engelliMi(String kullaniciAdi) {
         Kullanici k = kullanicilar.get(kullaniciAdi);
         return k != null && k.isEngelliMi();
+    }
+
+    public boolean kullaniciVarMi(String kullaniciAdi) {
+        return kullanicilar.containsKey(kullaniciAdi);
+    }
+
+    public long kalanBeklemeSaniyesi(String kullaniciAdi) {
+        Kullanici k = kullanicilar.get(kullaniciAdi);
+        if (k == null || !k.isEngelliMi() || k.getEngellemeSaati() == null) return 0;
+        long kalan = ChronoUnit.SECONDS.between(LocalDateTime.now(), k.getEngellemeSaati().plusMinutes(10));
+        return Math.max(0, kalan);
     }
 
     public boolean pasifMi(String kullaniciAdi) {
