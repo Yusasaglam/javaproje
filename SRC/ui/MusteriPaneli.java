@@ -64,6 +64,7 @@ public class MusteriPaneli extends BorderPane {
     // Geri alma
     private Button pcGeriAlBtn, trGeriAlBtn;
     private javafx.animation.Timeline geriAlTimeline;
+    private boolean limitYenileniyor = false;
 
     // Kredi Yönetimi
     private ComboBox<String> krediHesapCombo;
@@ -771,9 +772,10 @@ public class MusteriPaneli extends BorderPane {
     }
 
     private void limitlerYenile() {
-        if (limitHesapCombo == null) return;
+        if (limitYenileniyor || limitHesapCombo == null) return;
         String mId = kullanici.getMusteriId();
         if (mId == null) return;
+        limitYenileniyor = true;
 
         // Combo doldur
         String secili = limitHesapCombo.getValue();
@@ -823,6 +825,7 @@ public class MusteriPaneli extends BorderPane {
             limitBekleyenLabel.setVisible(false);
             limitBekleyenLabel.setManaged(false);
         }
+        limitYenileniyor = false;
     }
 
     private void limitTalepGonder() {
