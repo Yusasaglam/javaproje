@@ -241,6 +241,13 @@ public class RiskEngine implements IRiskCalculatable {
         islemKaydet(hesapId, musteriId);
     }
 
+    public void transferGeriAl(String hesapId, double miktar) {
+        if (LocalDate.now().equals(gunlukTransferTarihleri.get(hesapId))) {
+            double mevcut = gunlukTransferler.getOrDefault(hesapId, 0.0);
+            gunlukTransferler.put(hesapId, Math.max(0.0, mevcut - miktar));
+        }
+    }
+
     public void yatirmaKaydet(String hesapId, String musteriId) {
         islemKaydet(hesapId, musteriId);
     }
@@ -442,8 +449,8 @@ public class RiskEngine implements IRiskCalculatable {
 
     public HesapLimiti varsayilanLimit() {
         return new HesapLimiti(
-            VARSAYILAN_GUNLUK_CEKIM,    VARSAYILAN_GUNLUK_TRANSFER,
-            VARSAYILAN_MAKS_CEKIM,      VARSAYILAN_MAKS_TRANSFER);
+            VARSAYILAN_GUNLUK_CEKIM, VARSAYILAN_GUNLUK_TRANSFER,
+            VARSAYILAN_MAKS_CEKIM,   VARSAYILAN_MAKS_TRANSFER);
     }
 
     public Map<String, HesapLimiti> getOzelLimitler() {

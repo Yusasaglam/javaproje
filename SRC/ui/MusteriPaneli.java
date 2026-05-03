@@ -776,56 +776,58 @@ public class MusteriPaneli extends BorderPane {
         String mId = kullanici.getMusteriId();
         if (mId == null) return;
         limitYenileniyor = true;
+        try {
+            // Combo doldur
+            String secili = limitHesapCombo.getValue();
+            limitHesapCombo.getItems().clear();
+            for (Account h : kontrolcu.musteriHesaplari(mId))
+                limitHesapCombo.getItems().add(h.getHesapId() + " – " + h.getHesapTuru());
+            if (secili != null) limitHesapCombo.setValue(secili);
+            if (limitHesapCombo.getValue() == null && !limitHesapCombo.getItems().isEmpty())
+                limitHesapCombo.getSelectionModel().selectFirst();
 
-        // Combo doldur
-        String secili = limitHesapCombo.getValue();
-        limitHesapCombo.getItems().clear();
-        for (Account h : kontrolcu.musteriHesaplari(mId))
-            limitHesapCombo.getItems().add(h.getHesapId() + " – " + h.getHesapTuru());
-        if (secili != null) limitHesapCombo.setValue(secili);
-        if (limitHesapCombo.getValue() == null && !limitHesapCombo.getItems().isEmpty())
-            limitHesapCombo.getSelectionModel().selectFirst();
+            String id = seciliHesapId(limitHesapCombo);
+            if (id == null) return;
 
-        String id = seciliHesapId(limitHesapCombo);
-        if (id == null) return;
+            // Mevcut limitler
+            double gCekim    = kontrolcu.getGunlukCekimLimiti(id);
+            double gTransfer = kontrolcu.getGunlukTransferLimiti(id);
+            model.HesapLimiti hl = kontrolcu.getHesapLimiti(id);
+            double tCekim    = hl != null ? hl.getTekIslemCekimLimiti()    : 200_000;
+            double tTransfer = hl != null ? hl.getTekIslemTransferLimiti() : 200_000;
+            limitMevcutLabel.setText(String.format(Locale.US,
+                "Günlük Çekim: %,.0f ₺  |  Günlük Transfer: %,.0f ₺  |  Tek Çekim: %,.0f ₺  |  Tek Transfer: %,.0f ₺",
+                gCekim, gTransfer, tCekim, tTransfer));
 
-        // Mevcut limitler
-        double gCekim    = kontrolcu.getGunlukCekimLimiti(id);
-        double gTransfer = kontrolcu.getGunlukTransferLimiti(id);
-        model.HesapLimiti hl = kontrolcu.getHesapLimiti(id);
-        double tCekim    = hl != null ? hl.getTekIslemCekimLimiti()    : 50_000;
-        double tTransfer = hl != null ? hl.getTekIslemTransferLimiti() : 50_000;
-        limitMevcutLabel.setText(String.format(Locale.US,
-            "Günlük Çekim: %,.0f ₺  |  Günlük Transfer: %,.0f ₺  |  Tek Çekim: %,.0f ₺  |  Tek Transfer: %,.0f ₺",
-            gCekim, gTransfer, tCekim, tTransfer));
+            // Form alanlarına mevcut değerleri yaz
+            limitGunlukCekimField.setText(String.valueOf((long) gCekim));
+            limitGunlukTransferField.setText(String.valueOf((long) gTransfer));
+            limitTekCekimField.setText(String.valueOf((long) tCekim));
+            limitTekTransferField.setText(String.valueOf((long) tTransfer));
 
-        // Form alanlarına mevcut değerleri yaz
-        limitGunlukCekimField.setText(String.valueOf((long) gCekim));
-        limitGunlukTransferField.setText(String.valueOf((long) gTransfer));
-        limitTekCekimField.setText(String.valueOf((long) tCekim));
-        limitTekTransferField.setText(String.valueOf((long) tTransfer));
-
-        // Bekleyen değişim varsa göster
-        service.BekleyenLimitDegisimi bekleyen = kontrolcu.getBekleyenLimit(id);
-        if (bekleyen != null && !bekleyen.aktifMi()) {
-            long dk = bekleyen.kalanDakika();
-            long saat = dk / 60, dakika = dk % 60;
-            limitBekleyenLabel.setText(String.format(
-                "Bekleyen Limit Talebi — %d sa %d dk sonra aktif olacak\n" +
-                "Yeni Günlük Çekim: %,.0f ₺  |  Yeni Günlük Transfer: %,.0f ₺  |  " +
-                "Yeni Tek Çekim: %,.0f ₺  |  Yeni Tek Transfer: %,.0f ₺",
-                saat, dakika,
-                bekleyen.yeniLimit.getGunlukCekimLimiti(),
-                bekleyen.yeniLimit.getGunlukTransferLimiti(),
-                bekleyen.yeniLimit.getTekIslemCekimLimiti(),
-                bekleyen.yeniLimit.getTekIslemTransferLimiti()));
-            limitBekleyenLabel.setVisible(true);
-            limitBekleyenLabel.setManaged(true);
-        } else {
-            limitBekleyenLabel.setVisible(false);
-            limitBekleyenLabel.setManaged(false);
+            // Bekleyen değişim varsa göster
+            service.BekleyenLimitDegisimi bekleyen = kontrolcu.getBekleyenLimit(id);
+            if (bekleyen != null && !bekleyen.aktifMi()) {
+                long dk = bekleyen.kalanDakika();
+                long saat = dk / 60, dakika = dk % 60;
+                limitBekleyenLabel.setText(String.format(
+                    "Bekleyen Limit Talebi — %d sa %d dk sonra aktif olacak\n" +
+                    "Yeni Günlük Çekim: %,.0f ₺  |  Yeni Günlük Transfer: %,.0f ₺  |  " +
+                    "Yeni Tek Çekim: %,.0f ₺  |  Yeni Tek Transfer: %,.0f ₺",
+                    saat, dakika,
+                    bekleyen.yeniLimit.getGunlukCekimLimiti(),
+                    bekleyen.yeniLimit.getGunlukTransferLimiti(),
+                    bekleyen.yeniLimit.getTekIslemCekimLimiti(),
+                    bekleyen.yeniLimit.getTekIslemTransferLimiti()));
+                limitBekleyenLabel.setVisible(true);
+                limitBekleyenLabel.setManaged(true);
+            } else {
+                limitBekleyenLabel.setVisible(false);
+                limitBekleyenLabel.setManaged(false);
+            }
+        } finally {
+            limitYenileniyor = false;
         }
-        limitYenileniyor = false;
     }
 
     private void limitTalepGonder() {

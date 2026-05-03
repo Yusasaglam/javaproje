@@ -768,6 +768,7 @@ public class BankController implements IBankService {
                 if (kaynak != null && hedef != null && hedef.getBakiye() >= bekleyen.miktar) {
                     hedef.paraCek(bekleyen.miktar);
                     kaynak.paraYatir(bekleyen.miktar);
+                    riskMotoru.transferGeriAl(bekleyen.kaynakId, bekleyen.miktar);
                     riskMotoru.islemRiskOlaylariniIptalEt(islemId);
                     int skorSonra = getRiskSkoru(bekleyen.kaynakId);
                     logEkle(kaynak.getSahibiId(), bekleyen.kaynakId, ActivityLog.IslemTipi.GERI_AL,
