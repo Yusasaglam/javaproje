@@ -85,6 +85,7 @@ class UITema {
     static Label durumLabel() {
         Label l = new Label();
         l.setMaxWidth(Double.MAX_VALUE);
+        l.setWrapText(true);
         l.setAlignment(Pos.CENTER);
         l.setPadding(new Insets(4, 10, 4, 10));
         l.setFont(Font.font("System", FontWeight.BOLD, 12));

@@ -81,6 +81,12 @@ public class RiskEngine implements IRiskCalculatable {
     private static final int YAPILANDIRMA_COOLDOWN_SAAT = 24;
     // Günlük limit — günde yalnızca bir kez ceza (çifte sayım önleme)
     private final Map<String, LocalDate>           gunlukLimitTespiti        = new HashMap<>();
+    // K1 cooldown — 10 dk penceresi başına bir kez ceza
+    private final Map<String, LocalDateTime>       hizliBosaltmaTespiti      = new HashMap<>();
+    // K2 cooldown — gece başına (günde) bir kez ceza
+    private final Map<String, LocalDate>           geceTespiti               = new HashMap<>();
+    // K5 cooldown — 5 dk penceresi başına bir kez ceza
+    private final Map<String, LocalDateTime>       k5TespitZamani            = new HashMap<>();
 
     // ── Geçerlilik kontrolleri ────────────────────────────────────────────────
 
@@ -131,6 +137,15 @@ public class RiskEngine implements IRiskCalculatable {
         return geceModuMu() && miktar >= GECE_MODU_ESIGI;
     }
 
+    /** K2 cooldown: gece başına (günde) yalnızca bir kez ceza verir. */
+    public boolean geceModuTetiklensinMi(String hesapId, double miktar) {
+        if (!geceModuRisklimi(miktar)) return false;
+        LocalDate bugun = LocalDate.now();
+        if (bugun.equals(geceTespiti.get(hesapId))) return false;
+        geceTespiti.put(hesapId, bugun);
+        return true;
+    }
+
     public boolean aniDususVarMi(double bakiye, double miktar) {
         if (bakiye <= 0 || miktar < ANI_DUSUS_MIN) return false;
         return miktar / bakiye >= ANI_DUSUS_ORANI;
@@ -175,6 +190,17 @@ public class RiskEngine implements IRiskCalculatable {
         if (z == null) return 0;
         LocalDateTime esik = LocalDateTime.now().minusMinutes(KISA_SURE_DAKIKA);
         return z.stream().filter(t -> t.isAfter(esik)).count();
+    }
+
+    /** K5 cooldown: 5 dk penceresi başına yalnızca bir kez ceza verir. */
+    public boolean k5TetiklensinMi(String musteriId) {
+        if (!kisaVadeliCokIslemMiMusteri(musteriId)) return false;
+        LocalDateTime son = k5TespitZamani.get(musteriId);
+        if (son != null && son.isAfter(LocalDateTime.now().minusMinutes(KISA_SURE_DAKIKA))) {
+            return false;
+        }
+        k5TespitZamani.put(musteriId, LocalDateTime.now());
+        return true;
     }
 
     /** Müşterinin tüm hesaplarında adaptif eşikle velocity kontrolü. */
@@ -230,10 +256,18 @@ public class RiskEngine implements IRiskCalculatable {
         return c.stream().filter(e -> (long) e[0] >= esik).count();
     }
 
-    /** Kart hırsızlığı tespiti: 10 dk'da 3+ çekim VE toplam ≥25K. */
+    /** Kart hırsızlığı tespiti: 10 dk'da 3+ çekim VE toplam ≥25K. Aynı pencerede tekrar ceza vermez. */
     public boolean hizliBoşaltmaMi(String hesapId) {
-        return kisaVadeliCekimAdedi(hesapId) >= HIZLI_BOSALTMA_SAYI
-                && kisaVadeliToplamCekim(hesapId) >= HIZLI_BOSALTMA_MIKTAR;
+        if (kisaVadeliCekimAdedi(hesapId) < HIZLI_BOSALTMA_SAYI
+                || kisaVadeliToplamCekim(hesapId) < HIZLI_BOSALTMA_MIKTAR) {
+            return false;
+        }
+        LocalDateTime son = hizliBosaltmaTespiti.get(hesapId);
+        if (son != null && son.isAfter(LocalDateTime.now().minusMinutes(HIZLI_BOSALTMA_DAKIKA))) {
+            return false;
+        }
+        hizliBosaltmaTespiti.put(hesapId, LocalDateTime.now());
+        return true;
     }
 
     public void transferKaydet(String hesapId, double miktar, String musteriId) {
@@ -250,6 +284,13 @@ public class RiskEngine implements IRiskCalculatable {
         if (LocalDate.now().equals(gunlukTransferTarihleri.get(hesapId))) {
             double mevcut = gunlukTransferler.getOrDefault(hesapId, 0.0);
             gunlukTransferler.put(hesapId, Math.max(0.0, mevcut - miktar));
+        }
+        // İptal edilen transfer kisaVadeliCekimler'den de çıkarılır (K5 yanlış tetiklenmesin)
+        List<double[]> c = kisaVadeliCekimler.get(hesapId);
+        if (c != null) {
+            for (int i = c.size() - 1; i >= 0; i--) {
+                if (Double.compare(c.get(i)[1], miktar) == 0) { c.remove(i); break; }
+            }
         }
     }
 
@@ -323,7 +364,7 @@ public class RiskEngine implements IRiskCalculatable {
                 if (e.musteriId != null) {
                     MusteriRiskProfili p = musteriProfilleri.get(e.musteriId);
                     if (p != null)
-                        p.musteriSkoru = Math.max(0, p.musteriSkoru - (int)(e.puan * 0.5));
+                        p.musteriSkoru = Math.max(0, p.musteriSkoru - (int)(e.puan * 0.25));
                 }
             }
         }
@@ -488,9 +529,13 @@ public class RiskEngine implements IRiskCalculatable {
         if (cekimTarihleri != null) gunlukCekimTarihleri.putAll(cekimTarihleri);
     }
 
-    /** Hatalı şifre denemesi — hesap riski 15 puan artar (DAVRANISSAL ağırlık). */
-    public void basarisizGirisKaydet(String hesapId, String musteriId) {
-        skorEkle("LOGIN_FAIL", hesapId, musteriId, 15, IslemRiskAgirlik.DAVRANISSAL);
+    /** Hatalı şifre denemesi — hesap bazında değil, müşteri profiline +15 eklenir.
+     *  Hesaplar dolaylı olarak müşteri alt sınırı mekanizması üzerinden etkilenir. */
+    public void basarisizGirisKaydet(String musteriId) {
+        if (musteriId == null) return;
+        MusteriRiskProfili p = musteriProfilleri.computeIfAbsent(musteriId, MusteriRiskProfili::new);
+        p.musteriSkoru = Math.min(100, p.musteriSkoru + 15);
+        p.skorGuncelleme = LocalDate.now();
     }
 
     // ── Kullanıcı kategorisi ─────────────────────────────────────────────────

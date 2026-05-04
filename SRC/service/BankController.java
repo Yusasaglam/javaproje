@@ -316,6 +316,7 @@ public class BankController implements IBankService {
         // ── KURAL 1: Kart hırsızlığı / hesap ele geçirme — 10 dk'da 3+ çekim/transfer VE toplam ≥25K
         // Sıradan maaş çekimi (tek seferlik büyük çekim) bunu TETIKLEMEZ.
         // Tetiklemesi için hırsız gibi art arda birden fazla işlem gerekir.
+        boolean k1Tetiklendi = false;
         if ((agirlik == IslemRiskAgirlik.NAKIT_CEKIM || agirlik == IslemRiskAgirlik.DIS_TRANSFER)
                 && riskMotoru.hizliBoşaltmaMi(hesapId)) {
             riskMotoru.skorEkle(islemId, hesapId, musteriId, 40, agirlik);
@@ -323,11 +324,12 @@ public class BankController implements IBankService {
                     String.format("Hızlı hesap boşaltma: 10 dk'da %d çekim, toplam %.0f ₺",
                             riskMotoru.kisaVadeliCekimAdedi(hesapId), riskMotoru.kisaVadeliToplamCekim(hesapId)));
             tetiklenen.add("Hızlı Boşaltma");
+            k1Tetiklendi = true;
         }
 
         // ── KURAL 2: Gece saati çekimi — uyurken çalınan kart ──────────────────
-        // 01:00-06:00 arası ≥5K: normal insan bu saatte ATM'ye gitmez.
-        if (riskMotoru.geceModuRisklimi(miktar)) {
+        // 01:00-06:00 arası ≥5K: normal insan bu saatte ATM'ye gitmez. Gece başına bir kez tetiklenir.
+        if (riskMotoru.geceModuTetiklensinMi(hesapId, miktar)) {
             riskMotoru.skorEkle(islemId, hesapId, musteriId, 20, agirlik);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.GECE_MODU_ISLEM, miktar,
                     "Gece saati (01:00-06:00) yüksek tutarlı işlem — çalınan kart şüphesi");
@@ -335,9 +337,9 @@ public class BankController implements IBankService {
         }
 
         // ── KURAL 3: Ani hesap boşaltma — tek işlemde bakiyenin %90'ı, min 10K ─
-        // Kira veya araba alımı gibi büyük ödemeler bu eşiği nadiren geçer çünkü
-        // insanlar tüm birikimlerini tek seferde harcamaz. Geçerse şüphelidir.
-        if (riskMotoru.aniDususVarMi(bakiyeOncesi, miktar)) {
+        // K1 zaten tetiklendiyse bu aynı olayın tekrar sayılması demektir — atla.
+        // K1 = art arda çoklu işlem, K3 = tek seferlik büyük çekim; farklı senaryolar.
+        if (!k1Tetiklendi && riskMotoru.aniDususVarMi(bakiyeOncesi, miktar)) {
             riskMotoru.skorEkle(islemId, hesapId, musteriId, 25, agirlik);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.ANI_BAKIYE_DUSUSU, miktar,
                     String.format("Bakiyenin %%%.0f'i tek işlemde çekildi (%.0f ₺ / %.0f ₺)",
@@ -356,9 +358,11 @@ public class BankController implements IBankService {
         }
 
         // ── KURAL 5: Müşteri velocity — hesap ele geçirildi senaryosu ──────────
-        // Tüm hesaplarda adaptif eşiği aşan işlem hızı.
-        if (riskMotoru.kisaVadeliCokIslemMiMusteri(musteriId)) {
-            int ceza = riskMotoru.velocityCezasi(musteriId);
+        // Eşimi aşım miktarına göre kademeli ceza: 1-5 aşım→+20, 6-10→+35, 10+→+50. 5 dk'da bir kez.
+        if (riskMotoru.k5TetiklensinMi(musteriId)) {
+            long asim = riskMotoru.kisaVadeliMusteriIslemSayisi(musteriId)
+                        - riskMotoru.getKullaniciKategorisi(musteriId).velocityEsigi;
+            int ceza = asim <= 5 ? 20 : asim <= 10 ? 35 : 50;
             riskMotoru.skorEkle(islemId, hesapId, musteriId, ceza, IslemRiskAgirlik.DAVRANISSAL);
             riskYayinla(hesapId, musteriId, RiskOlayTuru.COK_FAZLA_ISLEM, miktar,
                     "Anormal işlem hızı: 5 dk'da " + riskMotoru.kisaVadeliMusteriIslemSayisi(musteriId) + " işlem");
@@ -375,9 +379,9 @@ public class BankController implements IBankService {
 
         // ── KURAL 7: Yeni alıcıya büyük transfer — hesap ele geçirme tespiti ────
         // Daha önce para gönderilmemiş hesaba büyük para gidiyorsa şüpheli.
-        // İlk kez küçük fatura ödemesi (300₺) → kayıt edilir, risk eklenmez.
+        // aliciKaydet BURADA ÇAĞRILMAZ — transfer onaylanınca transferOnayla() çağırır.
+        // Böylece iptal edilen transferler alıcıyı "bilinen" yapmaz.
         if (hedefHesapId != null && riskMotoru.yeniAliciMi(musteriId, hedefHesapId)) {
-            riskMotoru.aliciKaydet(musteriId, hedefHesapId);
             if (miktar >= RiskEngine.YENI_ALICI_BUYUK_ESIK) {
                 riskMotoru.skorEkle(islemId, hesapId, musteriId, 30, IslemRiskAgirlik.DIS_TRANSFER);
                 riskYayinla(hesapId, musteriId, RiskOlayTuru.YUKSEK_TUTAR, miktar,
@@ -486,11 +490,7 @@ public class BankController implements IBankService {
     public void basarisizGirisKaydet(String kullaniciAdi) {
         Kullanici k = kimlikDogrulama.getKullanicilar().get(kullaniciAdi);
         if (k == null || k.getMusteriId() == null) return;
-        Customer musteri = musteriDeposu.idIleGetir(k.getMusteriId());
-        if (musteri == null) return;
-        for (Account hesap : musteri.getHesaplar()) {
-            riskMotoru.basarisizGirisKaydet(hesap.getHesapId(), k.getMusteriId());
-        }
+        riskMotoru.basarisizGirisKaydet(k.getMusteriId());
     }
 
     // ── Sorgulama ─────────────────────────────────────────────────────────────
@@ -849,6 +849,8 @@ public class BankController implements IBankService {
             if (kaynak == null || hedef == null) return null;
             hedef.paraYatir(bekleyen.miktar);
             hedef.islemEkle(new Transfer(islemId, bekleyen.miktar, bekleyen.kaynakId, bekleyen.hedefId));
+            // Transfer onaylandı → alıcıyı şimdi kaydet (iptal edilseydi kaydetmeyecektik)
+            riskMotoru.aliciKaydet(kaynak.getSahibiId(), bekleyen.hedefId);
             bekleyenIslemler.remove(islemId);
             if (sonBekleyenIslem != null && sonBekleyenIslem.islemId.equals(islemId))
                 sonBekleyenIslem = null;
