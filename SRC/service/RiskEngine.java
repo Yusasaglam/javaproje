@@ -529,6 +529,43 @@ public class RiskEngine implements IRiskCalculatable {
         if (cekimTarihleri != null) gunlukCekimTarihleri.putAll(cekimTarihleri);
     }
 
+    /** Simülasyon yardımcısı: kısa vadeli çekim penceresini ve K1 cooldown'unu sıfırlar. */
+    public void simKisaVadeliSifirla(String hesapId) {
+        kisaVadeliCekimler.remove(hesapId);
+        hizliBosaltmaTespiti.remove(hesapId);
+    }
+
+    /** Simülasyon yardımcısı: K2 gece cooldown'unu sıfırlar. */
+    public void simGeceTespitiniSifirla(String hesapId) {
+        geceTespiti.remove(hesapId);
+    }
+
+    /** Son 10 işlemdeki yapılandırma kalıbı sayısını cooldown tetiklemeden döner. */
+    public int k4PatternSayisi(Account hesap) {
+        List<Transaction> islemler = hesap.getIslemler();
+        if (islemler == null || islemler.isEmpty()) return 0;
+        int baslangic = Math.max(0, islemler.size() - 10);
+        double alt = YUKSEK_RISK_ESIGI * YAPILANDIRMA_ORAN;
+        return (int) islemler.subList(baslangic, islemler.size()).stream()
+            .filter(t -> "PARA_CEKME".equals(t.getTur()) || "TRANSFER".equals(t.getTur()))
+            .filter(t -> t.getMiktar() >= alt && t.getMiktar() < YUKSEK_RISK_ESIGI)
+            .count();
+    }
+
+    public boolean k1CooldownAktifMi(String hesapId) {
+        LocalDateTime son = hizliBosaltmaTespiti.get(hesapId);
+        return son != null && son.isAfter(LocalDateTime.now().minusMinutes(HIZLI_BOSALTMA_DAKIKA));
+    }
+
+    public boolean k2CooldownAktifMi(String hesapId) {
+        return LocalDate.now().equals(geceTespiti.get(hesapId));
+    }
+
+    public boolean k5CooldownAktifMi(String musteriId) {
+        LocalDateTime son = k5TespitZamani.get(musteriId);
+        return son != null && son.isAfter(LocalDateTime.now().minusMinutes(KISA_SURE_DAKIKA));
+    }
+
     /** Hatalı şifre denemesi — hesap bazında değil, müşteri profiline +15 eklenir.
      *  Hesaplar dolaylı olarak müşteri alt sınırı mekanizması üzerinden etkilenir. */
     public void basarisizGirisKaydet(String musteriId) {

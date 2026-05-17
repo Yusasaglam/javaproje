@@ -487,6 +487,21 @@ public class BankController implements IBankService {
     public double kalanTransferLimiti(String hesapId) { return riskMotoru.kalanTransferLimiti(hesapId); }
     public HesapLimiti varsayilanLimit()             { return riskMotoru.varsayilanLimit(); }
 
+    public void simKisaVadeliSifirla(String hesapId)  { riskMotoru.simKisaVadeliSifirla(hesapId); }
+    public void simGeceTespitiniSifirla(String hesapId) { riskMotoru.simGeceTespitiniSifirla(hesapId); }
+
+    // ── Simülasyon durum sorgu metodları ──────────────────────────────────────
+    public long    k1CekimAdedi(String hesapId)          { return riskMotoru.kisaVadeliCekimAdedi(hesapId); }
+    public double  k1ToplamCekim(String hesapId)         { return riskMotoru.kisaVadeliToplamCekim(hesapId); }
+    public boolean k1CooldownAktifMi(String hesapId)     { return riskMotoru.k1CooldownAktifMi(hesapId); }
+    public boolean k2CooldownAktifMi(String hesapId)     { return riskMotoru.k2CooldownAktifMi(hesapId); }
+    public long    k5VelocitySayisi(String musteriId)    { return riskMotoru.kisaVadeliMusteriIslemSayisi(musteriId); }
+    public boolean k5CooldownAktifMi(String musteriId)   { return riskMotoru.k5CooldownAktifMi(musteriId); }
+    public int     k6GunlukIslemSayisi(String hesapId)   { return riskMotoru.bugunIslemSayisi(hesapId); }
+    public int     k4PatternSayisi(Account hesap)         { return riskMotoru.k4PatternSayisi(hesap); }
+    public KullaniciKategorisi getMusteriKategorisi(String musteriId) { return riskMotoru.getKullaniciKategorisi(musteriId); }
+    public boolean yeniAliciMi(String musteriId, String hedefHesapId) { return riskMotoru.yeniAliciMi(musteriId, hedefHesapId); }
+
     public void basarisizGirisKaydet(String kullaniciAdi) {
         Kullanici k = kimlikDogrulama.getKullanicilar().get(kullaniciAdi);
         if (k == null || k.getMusteriId() == null) return;

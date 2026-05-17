@@ -121,7 +121,7 @@ public class GirisEkrani {
 
         VBox.setMargin(ikon, new Insets(0, 0, 12, 0));
 
-        Label baslik = new Label("TÜRK BANKASI");
+        Label baslik = new Label("AkıllıBank");
         baslik.setFont(Font.font("Segoe UI", FontWeight.EXTRA_BOLD, 28));
         baslik.setTextFill(Color.WHITE);
         baslik.setStyle("-fx-letter-spacing: 2;");
@@ -129,7 +129,7 @@ public class GirisEkrani {
         VBox.setMargin(baslik, new Insets(0, 0, 6, 0));
 
         // Sarı ayraç çizgisi
-        Rectangle cizgi = new Rectangle(64, 3);
+        Rectangle cizgi = new Rectangle(130, 3);
         cizgi.setFill(Color.web("#ffd532"));
         cizgi.setArcWidth(3); cizgi.setArcHeight(3);
         VBox.setMargin(cizgi, new Insets(0, 0, 16, 0));
@@ -166,7 +166,7 @@ public class GirisEkrani {
         icerik.getChildren().addAll(ikon, baslik, cizgi, slogan, ozellikler);
 
         // Alt versiyon etiketi
-        Label versiyon = new Label("v2.0  –  OOP Bankacılık Sistemi");
+        Label versiyon = new Label("OOP Bankacılık Sistemi");
         versiyon.setFont(Font.font("Segoe UI", 11));
         versiyon.setTextFill(Color.web("#4a6494"));
         versiyon.layoutXProperty().bind(sol.widthProperty().multiply(0.10));
@@ -266,19 +266,12 @@ public class GirisEkrani {
         Separator sep = new Separator();
         VBox.setMargin(sep, new Insets(16, 0, 16, 0));
 
-        // Alt bilgi
-        Label altBilgi = new Label("🔑  Varsayılan giriş: admin / admin123");
-        altBilgi.setFont(Font.font("Segoe UI", 11));
-        altBilgi.setStyle("-fx-text-fill: #99a8c4;");
-        altBilgi.setMaxWidth(Double.MAX_VALUE);
-        altBilgi.setAlignment(Pos.CENTER);
 
         kart.getChildren().addAll(
             kartIkon, baslik, altBaslik,
             kulLabel, kullaniciAdiField,
             sifreLabel, sifreField,
-            girisBtn, mesajLabel,
-            sep, altBilgi
+            girisBtn, mesajLabel
         );
 
         sag.getChildren().add(kart);

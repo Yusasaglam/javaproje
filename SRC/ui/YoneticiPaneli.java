@@ -1081,11 +1081,11 @@ public class YoneticiPaneli extends BorderPane {
     private void botSimulasyonuCalistir(Button botBtn) {
         java.util.List<Account> hesaplar = kontrolcu.tumHesaplar();
         if (hesaplar.isEmpty()) {
-            UITema.uyari("Uyarı", "Bot simülasíonu için hesap gerekli. Demo Veri Yükle'yi deneyin.");
+            UITema.uyari("Uyarı", "Bot simülasyonu için hesap gerekli. Demo Veri Yükle'yi deneyin.");
             return;
         }
         botBtn.setDisable(true);
-        botBtn.setText("⏳ Simülasíyon Çalışıyor...");
+        botBtn.setText("⏳ Simülasyon Çalışıyor...");
         sonuclarBtn.setDisable(true);
         botSimLoglar = null;
 
@@ -1097,23 +1097,23 @@ public class YoneticiPaneli extends BorderPane {
             java.util.List<String> L = new java.util.ArrayList<>();
             int basarili = 0, basarisiz = 0;
 
-            // ── TEST HESABI: en düşük riskli vadesiz/vadeli, donmamış hesap ──────
+            // ── TEST HESABI ──────────────────────────────────────────────────────────
             Account testH = liste.stream()
                 .filter(h -> !(h instanceof KrediHesabi) && !(h instanceof DovizHesabi)
                              && !kontrolcu.suphelihMi(h.getHesapId()))
                 .min((a, b) -> Integer.compare(
-                         kontrolcu.getRiskSkoru(a.getHesapId()),
-                         kontrolcu.getRiskSkoru(b.getHesapId())))
+                        kontrolcu.getRiskSkoru(a.getHesapId()),
+                        kontrolcu.getRiskSkoru(b.getHesapId())))
                 .orElse(liste.get(0));
-            // 2M limit: Phase 3'te ~250K çekim ve Phase 2'de 3×12.8K transfer geçmeli
-            kontrolcu.limitGuncelle(testH.getHesapId(), new HesapLimiti(2_000_000, 2_000_000, 1_000_000, 1_000_000));
+            kontrolcu.limitGuncelle(testH.getHesapId(),
+                new HesapLimiti(2_000_000, 2_000_000, 1_000_000, 1_000_000));
             kontrolcu.paraYatir(testH.getHesapId(), 300_000);
             Customer testM  = kontrolcu.getMusteri(testH.getSahibiId());
             String   testAd = testM != null ? testM.getAd() : testH.getHesapId();
-            // KURUMSAL: velocity eşiği=50 → 30 işlemlik simülasíyonda KURAL 5 tetiklenmesin
+            // KURUMSAL eşiği=50 → 30 işlemde K5 tetiklenmesin
             kontrolcu.kullaniciKategorisiAta(testH.getSahibiId(), KullaniciKategorisi.KURUMSAL);
 
-            // ── VEL HESABI (Phase 4): farklı müşteri, donmamış, vadesiz/vadeli ──
+            // ── VEL HESABI (Aşama 4) ─────────────────────────────────────────────────
             Account velH = liste.stream()
                 .filter(h -> !(h instanceof KrediHesabi) && !(h instanceof DovizHesabi)
                              && !kontrolcu.suphelihMi(h.getHesapId())
@@ -1122,13 +1122,14 @@ public class YoneticiPaneli extends BorderPane {
                 .findFirst().orElse(null);
             String velAd = "—";
             if (velH != null) {
-                kontrolcu.limitGuncelle(velH.getHesapId(), new HesapLimiti(2_000_000, 2_000_000, 1_000_000, 1_000_000));
+                kontrolcu.limitGuncelle(velH.getHesapId(),
+                    new HesapLimiti(2_000_000, 2_000_000, 1_000_000, 1_000_000));
                 kontrolcu.paraYatir(velH.getHesapId(), 150_000);
                 Customer velM = kontrolcu.getMusteri(velH.getSahibiId());
                 velAd = velM != null ? velM.getAd() : velH.getHesapId();
             }
 
-            // Yapılandırma hedefi: testH ve velH'dan FARKLI bir hesap (velH'ya spurious etki olmasın)
+            // Yapılandırma hedef hesabı (testH ve velH'dan farklı)
             String yapiHedefId = liste.stream()
                 .filter(h -> !(h instanceof KrediHesabi) && !(h instanceof DovizHesabi)
                              && !h.getHesapId().equals(testH.getHesapId())
@@ -1136,7 +1137,7 @@ public class YoneticiPaneli extends BorderPane {
                 .map(Account::getHesapId).findFirst()
                 .orElse(velH != null ? velH.getHesapId() : null);
 
-            // Phase 4 yeni alıcı hedefleri: velH'dan ve testH'dan farklı (testH Phase 3'te donacak)
+            // Aşama 4 yeni alıcı hedefleri (3 farklı hesap)
             java.util.List<String> velHedefler = new java.util.ArrayList<>();
             for (Account h : liste) {
                 if (!(h instanceof KrediHesabi)
@@ -1146,195 +1147,305 @@ public class YoneticiPaneli extends BorderPane {
                     velHedefler.add(h.getHesapId());
             }
 
-            // ── BAŞLİK ────────────────────────────────────────────
+            // ── BAŞLIK ──────────────────────────────────────────────────────────────
             L.add("HEADER:BOT SİMÜLASYONU — RİSK SEVİYELERİ YOLCULUĞU (30 İŞLEM)");
-            L.add("INFO:Test Hesabı  :  " + testH.getHesapId() + " — " + testAd + "  │  Limit: 2,000,000 ₺/gün  │  Başlangıç bakiyesi: 300,000+ ₺");
-            L.add("INFO:Risk Kuralları (yeni motor — 7 kural):");
-            L.add("INFO:  K1 — Hızlı Boşaltma  :  10 dk'da 3+ çekim VE toplam ≥25,000 ₺  →  +40 puan");
-            L.add("INFO:  K2 — Gece Çekimi      :  01:00-06:00 arası ≥5,000 ₺  →  +20 puan");
-            L.add("INFO:  K3 — Ani Boşalma      :  bakiyenin ≥%90'ı tek işlemde (min 10,000 ₺)  →  +25 puan");
-            L.add("INFO:  K4 — Yapılandırma     :  son 10 işlemde 3+ kez 12,750-14,999 ₺ arası  →  +20 puan");
-            L.add("INFO:  K7 — Yeni Alıcı Büyük:  bilinmeyen hesaba ≥30,000 ₺ transfer  →  +30 puan");
-            L.add("INFO:Risk Eşikleri:  🟡 İZLENİYOR ≥31   🟠 RİSKLİ ≥61   🔴 ŞÜPHELİ/DONDURULDU ≥86");
+            L.add("INFO:Test Hesabı : " + testH.getHesapId() + " — " + testAd
+                + "  │  Limit: 2.000.000 ₺/gün  │  Başlangıç bakiyesi: 300.000+ ₺");
+            if (velH != null)
+                L.add("INFO:Vel. Hesabı : " + velH.getHesapId() + " — " + velAd
+                    + "  │  Limit: 2.000.000 ₺/gün  │  Başlangıç bakiyesi: 150.000+ ₺");
+            L.add("INFO:");
+            L.add("INFO:7 KURAL — COOLDOWN'LARLA GÜNCELLENMİŞ YENİ RİSK MOTORU:");
+            L.add("INFO:  K1 Hızlı Boşaltma  : 10 dk'da 3+ çekim/transfer VE toplam ≥25.000 ₺  →  +40 puan  [Cooldown: 10 dk]");
+            L.add("INFO:  K2 Gece Çekimi     : 01:00-06:00 arası ≥5.000 ₺  →  +20 puan  [Cooldown: günde 1 kez]");
+            L.add("INFO:  K3 Ani Boşalma     : Tek işlemde bakiyenin ≥%%90'ı (min 10.000 ₺)  →  +25 puan");
+            L.add("INFO:  K4 Yapılandırma    : Son 10 işlemde 3+ kez 12.750-14.999 ₺ arası  →  +20 puan  [Cooldown: 24 saat]");
+            L.add("INFO:  K5 Anormal Hız     : 5 dk'da velocity eşiği aşıldığında  →  +20/35/50 puan  [Cooldown: 5 dk]");
+            L.add("INFO:  K6 Günlük Limit    : Günde 30+ işlem  →  +20 puan  [Cooldown: günde 1 kez]");
+            L.add("INFO:  K7 Yeni Alıcı      : Bilinmeyen hesaba 10-30K→+12, ≥30K→+30 puan");
+            L.add("INFO:");
+            L.add("INFO:Risk Eşikleri: 🟢 GÜVENLİ <31   🟡 İZLENİYOR 31-60   🟠 RİSKLİ 61-85   🔴 DONDURULDU ≥86");
             L.add("INFO:");
 
-            // ── AŞAMA 1: GÜVENLİ (işlem 1-6) ─────────────────────────────────
-            L.add("PHASE:▌ AŞAMA 1 — 🟢 GÜVENLİ  (İşlem 1-6)  Küçük ve normal işlemler — hiçbir risk tetiklenmiyor");
-            // İşlem 3 (3K ÇEKİM) ve işlem 5 (1.5K ÇEKİM): kisaVadeliCekimler'e kaydediliyor — Phase 3 için zemin hazırlığı
-            double[] kM = {1200, 2500, 3000, 800, 1500, 2000};
-            String[] kT = {"YATIRMA","YATIRMA","ÇEKİM","YATIRMA","ÇEKİM","YATIRMA"};
-            int geceCekimSayisi = 0;
+            // ══════════════════════════════════════════════════════════════════════════
+            // AŞAMA 1 — GÜVENLİ (işlem 1-6): Küçük yatırmalar — hiçbir kural yok
+            // ══════════════════════════════════════════════════════════════════════════
+            L.add("PHASE:▌ AŞAMA 1 — 🟢 GÜVENLİ  (İşlem 1-6)" +
+                  "  Normal bankacılık işlemleri — hiçbir risk kuralı tetiklenmiyor");
+            L.add("INFO:  Hedef: Skor 0 olarak kalır. Tüm işlemler küçük yatırmalar, eşiklerin çok altında.");
+            L.add("INFO:");
+            double[] p1M = {1_000, 1_500, 2_000, 800, 1_200, 3_000};
             for (int i = 0; i < 6; i++) {
                 int no = i + 1;
-                double m = kM[i]; String tip = kT[i];
-                double bOnce = testH.getBakiye();
-                int sBefore = kontrolcu.getRiskSkoru(testH.getHesapId());
+                double m = p1M[i];
+                double bOnce  = testH.getBakiye();
+                int    sBefore = kontrolcu.getRiskSkoru(testH.getHesapId());
                 try {
-                    boolean ok = "ÇEKİM".equals(tip)
-                        ? kontrolcu.paraCek(testH.getHesapId(), m)
-                        : kontrolcu.paraYatir(testH.getHesapId(), m);
-                    if (ok) { basarili++; if ("ÇEKİM".equals(tip)) geceCekimSayisi++; }
-                    else basarisiz++;
+                    kontrolcu.paraYatir(testH.getHesapId(), m);
+                    basarili++;
                     int sAfter = kontrolcu.getRiskSkoru(testH.getHesapId());
-                    L.add("TXNOK:#" + String.format("%02d", no) + "  " + tip + "  │  " + testAd + "  [" + testH.getHesapId() + "]");
-                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                    L.add("TXNOK:#" + String.format("%02d", no) + "  PARA YATIRMA  │  "
+                        + testAd + "  [" + testH.getHesapId() + "]");
+                    L.add("TXNAMT:   Tutar: +" + String.format(Locale.US, "%,.0f ₺", m)
                         + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                         + " → " + String.format(Locale.US, "%,.0f ₺", testH.getBakiye()));
-                    L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi — eşiklerin çok altında");
-                    L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter + "   " + riskSeviyeEmoji(sAfter));
-                } catch (Exception e) {
+                    L.add("TXNRISK:  ✅  Tetiklenen kural yok — küçük yatırma, tüm eşiklerin altında");
+                    L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter + "    " + riskSeviyeEmoji(sAfter));
+                    kuralDurumuLogla(L, testH.getHesapId(), testH.getSahibiId(), testH,
+                        m, bOnce, false, false, false, sAfter);
+                } catch (Exception ex) {
                     basarisiz++;
-                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  " + tip + "  │  " + testAd + "  [" + testH.getHesapId() + "]");
-                    L.add("TXNRISK:  ❌  Hata: " + e.getMessage());
-                    L.add("TXNSCORE: Skor değişmedi: " + kontrolcu.getRiskSkoru(testH.getHesapId()));
+                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  PARA YATIRMA  │  " + testAd);
+                    L.add("TXNRISK:  ❌  " + ex.getMessage());
+                    L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
                 }
                 L.add("TXNSEP:");
-                try { Thread.sleep(20); } catch (InterruptedException ig) {}
             }
-            L.add("SCORE:▸ Aşama 1 tamamlandı.  Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100 — " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(testH.getHesapId())));
+            // Kısa vadeli pencereyi temizle → Aşama 2 temiz başlasın
+            kontrolcu.simKisaVadeliSifirla(testH.getHesapId());
+            int s1 = kontrolcu.getRiskSkoru(testH.getHesapId());
+            L.add("SCORE:▸ Aşama 1 tamamlandı.  Skor: " + s1 + "/100  " + riskSeviyeEmoji(s1)
+                + "  │  Kısa vadeli pencere sıfırlandı");
             L.add("INFO:");
 
-            // ── AŞAMA 2: YAPILANDIRMA TESPİTİ (işlem 7-14) ──────────────────────
-            // 12,800 ₺ transferler: eşiğin hemen altı (KURAL 4 eşiği: 12,750-14,999 ₺)
-            // Transfer kullanılıyor → kisaVadeliCekimler etkilenmiyor → KURAL 1 erken tetiklenmiyor
-            // İşlem 7: yeni alıcı orta (+12, KURAL 7), işlem 9: 3. tekrar → yapılandırma (+20, KURAL 4)
-            L.add("PHASE:▌ AŞAMA 2 — 🕵 KARA PARA AKLAMA TESPİTİ  (İşlem 7-14)  Yapılandırma: 12,800 ₺ ardışık transferler → KURAL 4");
-            double YAPI_M = 12_800.0;
-            double[] p2M = {YAPI_M, YAPI_M, YAPI_M, 2000, 2500, 3000, 2200, 2800};
-            String[] p2T = {"TRANSFER","TRANSFER","TRANSFER","YATIRMA","YATIRMA","YATIRMA","YATIRMA","YATIRMA"};
+            // ══════════════════════════════════════════════════════════════════════════
+            // AŞAMA 2 — YAPILANDIRMA + YENİ ALICI (işlem 7-14): K4 ve K7 tetikleniyor
+            // ══════════════════════════════════════════════════════════════════════════
+            L.add("PHASE:▌ AŞAMA 2 — 🕵 YAPILANDIRMA + YENİ ALICI  (İşlem 7-14)" +
+                  "  K4(+20) + K7(+12) → Hedef: 🟡 İZLENİYOR seviyesi");
+            L.add("INFO:  Strateji: Ardışık 12.800 ₺ transferler (K4 eşiği: 12.750-14.999 ₺ arası 3 işlem).");
+            L.add("INFO:  K7: İlk transfer yeni alıcıya → +12 puan. Alıcı onayda kaydedilir.");
+            L.add("INFO:  K4: 3. transferde yapılandırma kalıbı tespiti → +20 puan.");
+            L.add("INFO:  Not: Her transferden önce kısa vadeli pencere sıfırlanır → K1 bu aşamada kasıtlı gösterilmiyor.");
+            L.add("INFO:");
+            double   YAPI_M = 12_800.0;
+            String[] p2Tip  = {"TRANSFER","TRANSFER","TRANSFER","YATIRMA","YATIRMA","YATIRMA","YATIRMA","YATIRMA"};
+            double[] p2M    = {YAPI_M, YAPI_M, YAPI_M, 5_000, 5_000, 5_000, 5_000, 5_000};
+            String[] p2Acik = {
+                "Transfer 1/3 — Yeni alıcıya ilk transfer: K7 tetiklenecek (+12)",
+                "Transfer 2/3 — Aynı alıcı (bilinen), yapılandırma kalıbı birikiyor",
+                "Transfer 3/3 — K4 eşiği doldu: 3 kez eşik altı transfer kalıbı!",
+                "Bakiye dengeleme yatırması",
+                "Bakiye dengeleme yatırması",
+                "Bakiye dengeleme yatırması",
+                "Bakiye dengeleme yatırması",
+                "Bakiye dengeleme yatırması"
+            };
             for (int i = 0; i < 8; i++) {
                 int no = i + 7;
                 if (kontrolcu.suphelihMi(testH.getHesapId())) {
-                    L.add("TXNFROZEN:#" + String.format("%02d", no) + "  " + p2T[i] + "  │  " + testAd + "  [" + testH.getHesapId() + "]");
-                    L.add("TXNAMT:   Planlanmış tutar: " + String.format(Locale.US, "%,.0f ₺", p2M[i]));
+                    L.add("TXNFROZEN:#" + String.format("%02d", no) + "  " + p2Tip[i]
+                        + "  │  " + testAd + "  [" + testH.getHesapId() + "]");
+                    L.add("TXNAMT:   Planlanmış: " + String.format(Locale.US, "%,.0f ₺", p2M[i]));
                     L.add("TXNRISK:  🔴  Hesap DONDURULMUŞ — işlem engellendi");
-                    L.add("TXNSCORE: " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(testH.getHesapId())) + "  │  Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
+                    L.add("TXNSCORE: " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(testH.getHesapId())));
                     L.add("TXNSEP:"); basarisiz++;
-                    try { Thread.sleep(15); } catch (InterruptedException ig) {} continue;
+                    continue;
                 }
-                double m = p2M[i]; String tip = p2T[i];
-                double bOnce = testH.getBakiye();
-                int sBefore = kontrolcu.getRiskSkoru(testH.getHesapId());
+                double m      = p2M[i];
+                double bOnce  = testH.getBakiye();
+                int    sBefore = kontrolcu.getRiskSkoru(testH.getHesapId());
+                boolean yeniAliciMiydi2 = "TRANSFER".equals(p2Tip[i]) && yapiHedefId != null
+                    && kontrolcu.yeniAliciMi(testH.getSahibiId(), yapiHedefId);
                 try {
-                    boolean ok = ("TRANSFER".equals(tip) && yapiHedefId != null)
-                        ? kontrolcu.transferYap(testH.getHesapId(), yapiHedefId, m)
-                        : kontrolcu.paraYatir(testH.getHesapId(), m);
+                    boolean ok;
+                    if ("TRANSFER".equals(p2Tip[i]) && yapiHedefId != null) {
+                        // K1 baskılamak için her transferden önce kısa vadeli pencere temizlenir
+                        kontrolcu.simKisaVadeliSifirla(testH.getHesapId());
+                        ok = kontrolcu.transferYap(testH.getHesapId(), yapiHedefId, m);
+                        // Transfer 1 onaylanır → alıcı kaydedilir (Transfer 2-3 K7 tetiklemez)
+                        if (i == 0 && ok) {
+                            BankController.BekleyenIslem bk = kontrolcu.getSonBekleyenIslem();
+                            if (bk != null) kontrolcu.transferOnayla(bk.islemId);
+                        }
+                    } else {
+                        ok = kontrolcu.paraYatir(testH.getHesapId(), m);
+                    }
                     if (ok) basarili++; else basarisiz++;
-                    int sAfter = kontrolcu.getRiskSkoru(testH.getHesapId());
-                    boolean dondu = kontrolcu.suphelihMi(testH.getHesapId());
-                    String hTag = dondu ? "TXNFROZEN:" : (sAfter >= 31 ? "TXNWARN:" : "TXNOK:");
-                    String sfx = dondu ? "  ← 🔴 OTOMATIİK DONDURULDU!" :
-                        (sAfter >= 61 && sBefore < 61 ? "  ← 🟠 RİSKLİ seviyesine girdi!" :
-                        (sAfter >= 31 && sBefore < 31 ? "  ← 🟡 İZLENİYOR seviyesine girdi!" : ""));
-                    L.add(hTag + "#" + String.format("%02d", no) + "  " + tip + "  │  " + testAd + "  [" + testH.getHesapId() + "]" + sfx);
-                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                    int     sAfter = kontrolcu.getRiskSkoru(testH.getHesapId());
+                    int     df     = sAfter - sBefore;
+                    boolean dondu  = kontrolcu.suphelihMi(testH.getHesapId());
+                    String hTag = dondu ? "TXNFROZEN:" :
+                        (sAfter >= 61 ? "TXNWARN:" : sAfter >= 31 ? "TXNWARN:" : "TXNOK:");
+                    String sfx = dondu ? "  ← 🔴 OTOMATİK DONDURULDU!" :
+                        sAfter >= 61 && sBefore < 61 ? "  ← 🟠 RİSKLİ seviyesine girdi!" :
+                        sAfter >= 31 && sBefore < 31 ? "  ← 🟡 İZLENİYOR seviyesine girdi!" : "";
+                    String hedefGos = "TRANSFER".equals(p2Tip[i]) && yapiHedefId != null
+                        ? " → " + yapiHedefId : "";
+                    L.add(hTag + "#" + String.format("%02d", no) + "  " + p2Tip[i] + hedefGos
+                        + "  │  " + testAd + "  [" + testH.getHesapId() + "]" + sfx);
+                    L.add("TXNAMT:   " + p2Acik[i]);
+                    L.add("TXNAMT:   Tutar: " + ("YATIRMA".equals(p2Tip[i]) ? "+" : "-")
+                        + String.format(Locale.US, "%,.0f ₺", m)
                         + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                         + " → " + String.format(Locale.US, "%,.0f ₺", testH.getBakiye()));
-                    int df = sAfter - sBefore;
-                    if (i == 0 && "TRANSFER".equals(tip) && df >= 10)
-                        L.add("TXNRISK:  👤  KURAL 7 — Yeni alıcıya orta büyüklükte transfer (12,800 ₺, ≥10,000 ₺ <30,000 ₺)  →  +" + df + " puan");
-                    else if (i == 2 && "TRANSFER".equals(tip) && df >= 15)
-                        L.add("TXNRISK:  🕵  KURAL 4 — Yapılandırma: 3. kez ardışık 12,750-14,999 ₺ arası transfer (eşik altı kalıbı)  →  +" + df + " puan");
-                    else if (df > 0)
-                        L.add("TXNRISK:  ⚡  Risk puanı değişti  →  +" + df + " puan");
-                    else
-                        L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi");
-                    if (dondu) L.add("TXNRISK:  🔴  Skor ≥86 — hesap otomatik donduruldu!");
-                    L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter + (df > 0 ? "  (+" + df + " puan)" : "") + "   " + riskSeviyeEmoji(sAfter));
+                    // Kural açıklamaları
+                    if ("TRANSFER".equals(p2Tip[i])) {
+                        if (i == 0 && df > 0)
+                            L.add("TXNRISK:  👤  KURAL 7 — Yeni alıcıya orta transfer"
+                                + " (12.800 ₺ ≥ 10.000 ₺ ve < 30.000 ₺)  →  +" + df + " puan"
+                                + "  │  Alıcı transfer onayında kaydedildi");
+                        else if (i == 1)
+                            L.add("TXNRISK:  ⏳  Yapılandırma kalıbı birikiyor:"
+                                + " 2/3 işlem tamamlandı (K4 eşiği: 3 işlem)  →  Skor değişmedi");
+                        else if (i == 2 && df >= 15)
+                            L.add("TXNRISK:  🕵  KURAL 4 — Yapılandırma tespiti:"
+                                + " 3 ardışık 12.750-14.999 ₺ arası transfer → eşik altı kalıp  →  +" + df + " puan");
+                        else if (df > 0)
+                            L.add("TXNRISK:  ⚡  Risk puanı değişti  →  +" + df + " puan");
+                        else
+                            L.add("TXNRISK:  ✅  Kural tetiklenmedi (alıcı biliniyor, pencere sıfırlandı)");
+                    } else {
+                        L.add("TXNRISK:  ✅  Kural tetiklenmedi — bakiye dengesi için yatırma");
+                    }
+                    if (dondu) L.add("TXNRISK:  🔴  Skor ≥86 → Hesap otomatik donduruldu!");
+                    L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter
+                        + (df > 0 ? "  (+" + df + " puan)" : "") + "    " + riskSeviyeEmoji(sAfter));
+                    kuralDurumuLogla(L, testH.getHesapId(), testH.getSahibiId(), testH,
+                        m, bOnce, "TRANSFER".equals(p2Tip[i]), yeniAliciMiydi2, false, sAfter);
                 } catch (model.YetersizBakiyeException e) {
                     basarisiz++;
-                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  " + tip + "  │  " + testAd);
-                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m) + "    │    Mevcut bakiye: " + String.format(Locale.US, "%,.0f ₺", e.getMevcutBakiye()));
+                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  " + p2Tip[i] + "  │  " + testAd);
+                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                        + "  │  Mevcut bakiye: " + String.format(Locale.US, "%,.0f ₺", e.getMevcutBakiye()));
                     L.add("TXNRISK:  ❌  Yetersiz bakiye — skor değişmedi");
-                    L.add("TXNSCORE: Skor değişmedi: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
+                    L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
                 } catch (Exception e) {
                     basarisiz++;
-                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  " + tip + "  │  " + testAd);
+                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  " + p2Tip[i] + "  │  " + testAd);
                     L.add("TXNRISK:  ❌  " + e.getMessage());
                     L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
                 }
                 L.add("TXNSEP:");
-                try { Thread.sleep(20); } catch (InterruptedException ig) {}
+                try { Thread.sleep(15); } catch (InterruptedException ig) {}
             }
-            L.add("SCORE:▸ Aşama 2 tamamlandı.  Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100 — " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(testH.getHesapId())));
+            int s2 = kontrolcu.getRiskSkoru(testH.getHesapId());
+            L.add("SCORE:▸ Aşama 2 tamamlandı.  Skor: " + s2 + "/100  " + riskSeviyeEmoji(s2));
             L.add("INFO:");
 
-            // ── AŞAMA 3: GECE MODU + KART HIRSIZLIĞI (işlem 15-22) ─────────────────────
-            // İşlem 15: 6K çekim → KURAL 2 (+20); count=3 ama toplam 10.5K < 25K → KURAL 1 yok
-            // İşlem 16: bakiye×0.92 → KURAL 2(+20) + KURAL 3(+25) + KURAL 1(+40) = +85 → DONDURULDU!
-            // İşlem 17-22: testH donmuş → 6 engellendi
+            // ══════════════════════════════════════════════════════════════════════════
+            // AŞAMA 3 — GECE MODU + KART HIRSIZLIĞI (işlem 15-22): K1+K2+K3
+            // ══════════════════════════════════════════════════════════════════════════
+            // Pencereyi kasıtlı SIFIRLAMIYORUZ → K1 doğal olarak 3. çekimde birikecek
+            kontrolcu.simGeceTespitiniSifirla(testH.getHesapId()); // K2 günlük sıfırla
             kontrolcu.simuleGeceModuAktifEt(true);
-            L.add("PHASE:▌ AŞAMA 3 — 🌙 KART HIRSIZLIĞI  (İşlem 15-22)  Gece modu + ani boşaltma + hızlı çekim serisi → 3 kural aynı anda!");
+            L.add("PHASE:▌ AŞAMA 3 — 🌙 KART HIRSIZLIĞI  (İşlem 15-22)" +
+                  "  K2+K1+K3 aynı anda tetikleniyor → OTOMATİK DONDURMA!");
+            L.add("INFO:  Gece modu aktif (01:00-06:00 simülasyonu).");
+            L.add("INFO:  İşlem 15: İlk gece çekimi (6.000 ₺)  → K2 tetiklenir (+20).  Cooldown başlar.");
+            L.add("INFO:  İşlem 16: İkinci gece çekimi (6.000 ₺)  → K2 COOLDOWN (tetiklenmez).  K1 count=2.");
+            L.add("INFO:  İşlem 17: Büyük çekim (bakiye×%%92)  → K3(+25) + K1(+40).  3 kural → DONDURULDU!");
+            L.add("INFO:  İşlem 18-22: Hesap dondurulmuş → tüm işlemler engellendi.");
+            L.add("INFO:");
+            // İşlem 15: 6K (gece) → K2 tetiklenir
+            // İşlem 16: 6K (gece) → K2 cooldown, count=2
+            // İşlem 17: bakiye×0.92 → K3 + K1 (count=3, total>>25K) → DONDURULDU
+            // İşlem 18-22: hesap dondurulmuş
+            double[] p3Cekim = {6_000, 6_000, -1};  // -1 = bakiye×0.92
             for (int i = 0; i < 8; i++) {
                 int no = i + 15;
                 if (kontrolcu.suphelihMi(testH.getHesapId())) {
-                    L.add("TXNFROZEN:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd + "  [" + testH.getHesapId() + "]");
-                    L.add("TXNAMT:   Engellendi");
-                    L.add("TXNRISK:  🔴  Hesap DONDURULMUŞ — gece de olsa tüm işlemler engellendi");
-                    L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100  " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(testH.getHesapId())));
+                    L.add("TXNFROZEN:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  "
+                        + testAd + "  [" + testH.getHesapId() + "]");
+                    L.add("TXNAMT:   Engellendi — hesap kilitli");
+                    L.add("TXNRISK:  🔴  Hesap DONDURULMUŞ — tüm işlemler bloke");
+                    L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100  "
+                        + riskSeviyeEmoji(kontrolcu.getRiskSkoru(testH.getHesapId())));
                     L.add("TXNSEP:"); basarisiz++;
-                    try { Thread.sleep(15); } catch (InterruptedException ig) {} continue;
+                    try { Thread.sleep(10); } catch (InterruptedException ig) {}
+                    continue;
                 }
-                // İşlem 15: 6K → sadece KURAL 2 (gece). İşlem 16: bakiye×0.92 → üç kural birden
-                double m = (i == 0) ? 6_000 : Math.max(10_001, Math.floor(testH.getBakiye() * 0.92));
-                double bOnce = testH.getBakiye();
-                int sBefore  = kontrolcu.getRiskSkoru(testH.getHesapId());
+                double m = (i < p3Cekim.length && p3Cekim[i] > 0)
+                    ? p3Cekim[i]
+                    : Math.max(10_001, Math.floor(testH.getBakiye() * 0.92));
+                double bOnce  = testH.getBakiye();
+                int    sBefore = kontrolcu.getRiskSkoru(testH.getHesapId());
                 try {
                     boolean ok = kontrolcu.paraCek(testH.getHesapId(), m);
-                    if (ok) { basarili++; geceCekimSayisi++; } else basarisiz++;
-                    int sAfter = kontrolcu.getRiskSkoru(testH.getHesapId());
-                    boolean dondu = kontrolcu.suphelihMi(testH.getHesapId());
-                    String hTag = dondu ? "TXNFROZEN:" : (sAfter >= 61 ? "TXNWARN:" : (sAfter >= 31 ? "TXNWARN:" : "TXNOK:"));
-                    String sfx = dondu ? "  ← 🔴 HESAP OTOMATIİK DONDURULDU!" :
-                        (sAfter >= 61 && sBefore < 61 ? "  ← 🟠 RİSKLİ seviyesine girdi!" :
-                        (sAfter >= 31 && sBefore < 31 ? "  ← 🟡 İZLENİYOR seviyesine girdi!" : ""));
-                    L.add(hTag + "#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd + "  [" + testH.getHesapId() + "]" + sfx);
-                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                    if (ok) basarili++; else basarisiz++;
+                    int     sAfter = kontrolcu.getRiskSkoru(testH.getHesapId());
+                    int     df     = sAfter - sBefore;
+                    boolean dondu  = kontrolcu.suphelihMi(testH.getHesapId());
+                    String hTag = dondu ? "TXNFROZEN:" :
+                        sAfter >= 61 ? "TXNWARN:" : sAfter >= 31 ? "TXNWARN:" : "TXNOK:";
+                    String sfx = dondu ? "  ← 🔴 OTOMATİK DONDURULDU!" :
+                        sAfter >= 61 && sBefore < 61 ? "  ← 🟠 RİSKLİ seviyesine girdi!" :
+                        sAfter >= 31 && sBefore < 31 ? "  ← 🟡 İZLENİYOR seviyesine girdi!" : "";
+                    L.add(hTag + "#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  "
+                        + testAd + "  [" + testH.getHesapId() + "]" + sfx);
+                    L.add("TXNAMT:   Tutar: -" + String.format(Locale.US, "%,.0f ₺", m)
                         + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                         + " → " + String.format(Locale.US, "%,.0f ₺", testH.getBakiye()));
-                    int df = sAfter - sBefore;
-                    if (m >= 5_000)
-                        L.add("TXNRISK:  🌙  KURAL 2 — Gece saati çekimi (01:00-06:00, " + String.format(Locale.US, "%,.0f", m) + " ₺ ≥ 5,000 ₺)  →  +20 puan");
-                    if (bOnce > 0 && m >= 10_000 && m / bOnce >= 0.90)
-                        L.add("TXNRISK:  💥  KURAL 3 — Ani bakiye boşalması: bakiyenin %" + (int)(m / bOnce * 100) + "'ı tek işlemde (min 10,000 ₺)  →  +25 puan");
-                    if (i > 0 && geceCekimSayisi >= 3)
-                        L.add("TXNRISK:  🚨  KURAL 1 — Hızlı hesap boşaltma: 10 dk'da " + geceCekimSayisi + " çekim serisi, toplam >> 25,000 ₺  →  +40 puan  │  Kart hırsızlığı şüphesi!");
-                    if (dondu)
-                        L.add("TXNRISK:  🔴  TOPLAM SKOR " + sAfter + "/100 — ŞÜPHELİ eşiğini (≥86) aştı → HESAP OTOMATIİK DONDURULDU!");
-                    if (df <= 0 && !dondu) L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi");
-                    L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter + (df > 0 ? "  (+" + df + " puan)" : "") + "   " + riskSeviyeEmoji(sAfter));
+                    // Açıklama
+                    if (i == 0) {
+                        L.add("TXNRISK:  🌙  KURAL 2 — İLK gece çekimi (01-06 arası, 6.000 ₺ ≥ 5.000 ₺)"
+                            + "  →  +" + (df > 0 ? df : 20) + " puan");
+                        L.add("TXNRISK:     Cooldown başladı → Bu gece bir daha K2 tetiklenmeyecek");
+                        L.add("TXNRISK:     Kısa vadeli pencere: count=1 (K1 için henüz 1/3)");
+                    } else if (i == 1) {
+                        L.add("TXNRISK:  🌙  İkinci gece çekimi — K2 COOLDOWN devrede → skor değişmedi");
+                        L.add("TXNRISK:     Kısa vadeli pencere: count=2 (K1 için 2/3 — bir daha gerekiyor)");
+                    } else if (i == 2) {
+                        boolean k3olu = bOnce > 0 && m >= 10_000 && m / bOnce >= 0.90;
+                        if (k3olu)
+                            L.add("TXNRISK:  💥  KURAL 3 — Ani boşalma: bakiyenin %"
+                                + (int)(m / bOnce * 100) + "'ı tek işlemde (min 10.000 ₺)  →  +25 puan");
+                        L.add("TXNRISK:  🚨  KURAL 1 — Hızlı boşaltma: 10 dk'da 3. işlem,"
+                            + " toplam >> 25.000 ₺  →  +40 puan  │  Kart hırsızlığı şüphesi!");
+                        L.add("TXNRISK:     ⟹ K2 cooldown + K3 ani boşalma + K1 hızlı boşaltma  →  Toplam: +"
+                            + df + " puan");
+                        if (dondu)
+                            L.add("TXNRISK:  🔴  Skor ≥86 → HESAP OTOMATİK DONDURULDU!");
+                    } else if (df > 0) {
+                        L.add("TXNRISK:  ⚡  Risk puanı değişti  →  +" + df + " puan");
+                    } else {
+                        L.add("TXNRISK:  ✅  Kural tetiklenmedi");
+                    }
+                    L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter
+                        + (df > 0 ? "  (+" + df + " puan)" : "") + "    " + riskSeviyeEmoji(sAfter));
+                    kuralDurumuLogla(L, testH.getHesapId(), testH.getSahibiId(), testH,
+                        m, bOnce, false, false, true, sAfter);
                 } catch (model.YetersizBakiyeException e) {
                     basarisiz++;
-                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd + "  [" + testH.getHesapId() + "]");
-                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m) + "    │    Mevcut bakiye: " + String.format(Locale.US, "%,.0f ₺", e.getMevcutBakiye()));
-                    L.add("TXNRISK:  ❌  Yetersiz bakiye — skor değişmedi");
-                    L.add("TXNSCORE: Skor değişmedi: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
+                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd);
+                    L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                        + "  │  Mevcut bakiye: " + String.format(Locale.US, "%,.0f ₺", e.getMevcutBakiye()));
+                    L.add("TXNRISK:  ❌  Yetersiz bakiye");
+                    L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
                 } catch (model.RiskLimitiAsildiException e) {
                     basarisiz++;
-                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd + "  [" + testH.getHesapId() + "]");
+                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd);
                     L.add("TXNRISK:  ❌  Limit aşıldı: " + e.getMessage());
                     L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
                 } catch (Exception e) {
                     basarisiz++;
-                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd + "  [" + testH.getHesapId() + "]");
+                    L.add("TXNFAIL:#" + String.format("%02d", no) + "  🌙 ÇEKİM  │  " + testAd);
                     L.add("TXNRISK:  ❌  " + e.getMessage());
                     L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(testH.getHesapId()) + "/100");
                 }
                 L.add("TXNSEP:");
-                try { Thread.sleep(20); } catch (InterruptedException ig) {}
+                try { Thread.sleep(15); } catch (InterruptedException ig) {}
             }
             kontrolcu.simuleGeceModuAktifEt(false);
-            L.add("SCORE:▸ Aşama 3 tamamlandı.  🌙 Gece modu kapatıldı.  " + testAd + " hesabı donduruldu.");
+            int s3 = kontrolcu.getRiskSkoru(testH.getHesapId());
+            L.add("SCORE:▸ Aşama 3 tamamlandı.  🌙 Gece modu kapatıldı.  "
+                + testAd + " donduruldu.  Skor: " + s3 + "/100  " + riskSeviyeEmoji(s3));
             L.add("INFO:");
 
-            // ── AŞAMA 4: YENİ ALICI TESPİTİ (işlem 23-30) ─────────────────────────────
-            // velH farklı müşteri → bilinmeyen alıcılara ≥30K transfer → KURAL 7 her seferinde +30
-            // 2-3 transferde skor 86+ → DONDURULDU, kalan işlemler engellendi
-            L.add("PHASE:▌ AŞAMA 4 — 🎯 HESAP ELE GEÇİRİLDİ  (İşlem 23-30)  Yeni alıcılara büyük transfer → KURAL 7 her seferinde +30 puan");
+            // ══════════════════════════════════════════════════════════════════════════
+            // AŞAMA 4 — HESAP ELE GEÇİRİLDİ (işlem 23-30): K7 büyük + K1
+            // ══════════════════════════════════════════════════════════════════════════
+            L.add("PHASE:▌ AŞAMA 4 — 🎯 HESAP ELE GEÇİRİLDİ  (İşlem 23-30)" +
+                  "  K7 büyük(+30) × 3 + K1(+40) → OTOMATİK DONDURMA!");
+            L.add("INFO:  Farklı müşteri hesabı — bilinmeyen alıcılara ardı ardına büyük transfer.");
+            L.add("INFO:  K7 büyük: Her transfer yeni alıcıya ≥30.000 ₺ → +30 puan.");
+            L.add("INFO:  K1: 3. transferde count=3, toplam=105.000 ₺ >> 25.000 ₺ → +40 puan (K7 ile aynı anda).");
+            L.add("INFO:  Skor ilerleme: T1→+30 (GÜVENLİ) | T2→+30 (İZLENİYOR) | T3→+70 (DONDURULDU)");
+            L.add("INFO:");
             if (velH == null) {
                 for (int i = 0; i < 8; i++) {
-                    L.add("TXNOK:#" + String.format("%02d", i + 23) + "  [Tek müşteri — Phase 4 atlandı]");
-                    L.add("TXNRISK:  ℹ  Farklı müşteri hesabı bulunamadı — demo veri gerekli");
+                    L.add("TXNOK:#" + String.format("%02d", i + 23) + "  [Aşama 4 atlandı]");
+                    L.add("TXNRISK:  ℹ  Farklı müşteri hesabı bulunamadı — Demo Veri Yükle ile 2+ müşteri oluşturun");
                     L.add("TXNSEP:"); basarili++;
                 }
             } else {
@@ -1342,75 +1453,112 @@ public class YoneticiPaneli extends BorderPane {
                 for (int i = 0; i < 8; i++) {
                     int no = i + 23;
                     if (kontrolcu.suphelihMi(velHId)) {
-                        L.add("TXNFROZEN:#" + String.format("%02d", no) + "  TRANSFER  │  " + velAd + "  [" + velHId + "]");
-                        L.add("TXNAMT:   Engellendi");
-                        L.add("TXNRISK:  🔴  Hesap DONDURULMUŞ — tüm işlemler engellendi");
-                        L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(velHId) + "/100  " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(velHId)));
+                        L.add("TXNFROZEN:#" + String.format("%02d", no) + "  TRANSFER  │  "
+                            + velAd + "  [" + velHId + "]");
+                        L.add("TXNAMT:   Engellendi — hesap kilitli");
+                        L.add("TXNRISK:  🔴  Hesap DONDURULMUŞ — tüm işlemler bloke");
+                        L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(velHId) + "/100  "
+                            + riskSeviyeEmoji(kontrolcu.getRiskSkoru(velHId)));
                         L.add("TXNSEP:"); basarisiz++;
-                        try { Thread.sleep(15); } catch (InterruptedException ig) {} continue;
+                        try { Thread.sleep(10); } catch (InterruptedException ig) {}
+                        continue;
                     }
-                    String hedefId = velHedefler.isEmpty() ? null : velHedefler.get(i % velHedefler.size());
+                    String hedefId = velHedefler.isEmpty() ? null
+                        : velHedefler.get(i % velHedefler.size());
                     if (hedefId == null) {
                         try { kontrolcu.paraYatir(velHId, 5_000); basarili++; } catch (Exception ex) { basarisiz++; }
                         L.add("TXNOK:#" + String.format("%02d", no) + "  YATIRMA  │  " + velAd + "  [" + velHId + "]");
-                        L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi");
-                        L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(velHId) + "   " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(velHId)));
+                        L.add("TXNRISK:  ✅  Kural tetiklenmedi");
+                        L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(velHId)
+                            + "  " + riskSeviyeEmoji(kontrolcu.getRiskSkoru(velHId)));
                         L.add("TXNSEP:"); continue;
                     }
-                    double m = 35_000.0;
-                    double bOnce = velH.getBakiye();
-                    int sBefore  = kontrolcu.getRiskSkoru(velHId);
+                    double m      = 35_000.0;
+                    double bOnce  = velH.getBakiye();
+                    int    sBefore = kontrolcu.getRiskSkoru(velHId);
+                    boolean yeniAliciMiydi4 = kontrolcu.yeniAliciMi(velH.getSahibiId(), hedefId);
                     try {
                         boolean ok = kontrolcu.transferYap(velHId, hedefId, m);
                         if (ok) basarili++; else basarisiz++;
-                        int sAfter = kontrolcu.getRiskSkoru(velHId);
-                        boolean dondu = kontrolcu.suphelihMi(velHId);
-                        String hTag = dondu ? "TXNFROZEN:" : (sAfter >= 61 ? "TXNWARN:" : (sAfter >= 31 ? "TXNWARN:" : "TXNOK:"));
-                        String sfx = dondu ? "  ← 🔴 HESAP OTOMATIİK DONDURULDU!" :
-                            (sAfter >= 61 && sBefore < 61 ? "  ← 🟠 RİSKLİ seviyesine girdi!" :
-                            (sAfter >= 31 && sBefore < 31 ? "  ← 🟡 İZLENİYOR seviyesine girdi!" : ""));
-                        L.add(hTag + "#" + String.format("%02d", no) + "  TRANSFER→" + hedefId + "  │  " + velAd + "  [" + velHId + "]" + sfx);
-                        L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                        int     sAfter = kontrolcu.getRiskSkoru(velHId);
+                        int     df     = sAfter - sBefore;
+                        boolean dondu  = kontrolcu.suphelihMi(velHId);
+                        String hTag = dondu ? "TXNFROZEN:" :
+                            sAfter >= 61 ? "TXNWARN:" : sAfter >= 31 ? "TXNWARN:" : "TXNOK:";
+                        String sfx = dondu ? "  ← 🔴 OTOMATİK DONDURULDU!" :
+                            sAfter >= 61 && sBefore < 61 ? "  ← 🟠 RİSKLİ seviyesine girdi!" :
+                            sAfter >= 31 && sBefore < 31 ? "  ← 🟡 İZLENİYOR seviyesine girdi!" : "";
+                        L.add(hTag + "#" + String.format("%02d", no) + "  TRANSFER → " + hedefId
+                            + "  │  " + velAd + "  [" + velHId + "]" + sfx);
+                        L.add("TXNAMT:   Tutar: -" + String.format(Locale.US, "%,.0f ₺", m)
                             + "    │    Bakiye: " + String.format(Locale.US, "%,.0f ₺", bOnce)
                             + " → " + String.format(Locale.US, "%,.0f ₺", velH.getBakiye()));
-                        int df = sAfter - sBefore;
-                        if (df >= 25)
-                            L.add("TXNRISK:  🎯  KURAL 7 — Bilinmeyen alıcıya büyük transfer (35,000 ₺ ≥ 30,000 ₺)  →  +" + df + " puan  │  Hesap ele geçirme şüphesi!");
-                        else if (df > 0)
-                            L.add("TXNRISK:  ⚡  Risk puanı değişti  →  +" + df + " puan");
-                        else
-                            L.add("TXNRISK:  ✅  Risk faktörü tetiklenmedi (alıcı artık biliniyor)");
-                        if (dondu)
-                            L.add("TXNRISK:  🔴  TOPLAM SKOR " + sAfter + "/100 — ŞÜPHELİ eşiğini (≥86) aştı → HESAP OTOMATIİK DONDURULDU!");
-                        L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter + (df > 0 ? "  (+" + df + " puan)" : "") + "   " + riskSeviyeEmoji(sAfter));
+                        if (i < 2) {
+                            L.add("TXNRISK:  🎯  KURAL 7 — Bilinmeyen alıcıya büyük transfer"
+                                + " (35.000 ₺ ≥ 30.000 ₺)  →  +" + (df >= 25 ? 30 : df) + " puan");
+                            L.add("TXNRISK:     Kısa vadeli pencere: count=" + (i + 1)
+                                + " (K1 için " + (i + 1) + "/3 — henüz tetiklenmiyor)");
+                        } else if (i == 2) {
+                            L.add("TXNRISK:  🎯  KURAL 7 — Bilinmeyen alıcıya büyük transfer"
+                                + " (35.000 ₺)  →  +30 puan");
+                            L.add("TXNRISK:  🚨  KURAL 1 — count=3, toplam=105.000 ₺ >> 25.000 ₺"
+                                + "  →  +40 puan  │  Hesap ele geçirildi şüphesi!");
+                            L.add("TXNRISK:     ⟹ K7 + K1 aynı anda  →  Toplam: +" + df + " puan");
+                            if (dondu)
+                                L.add("TXNRISK:  🔴  Skor ≥86 → HESAP OTOMATİK DONDURULDU!");
+                        } else if (df > 0) {
+                            L.add("TXNRISK:  ⚡  +" + df + " puan");
+                        } else {
+                            L.add("TXNRISK:  ✅  Kural tetiklenmedi");
+                        }
+                        L.add("TXNSCORE: Skor: " + sBefore + " → " + sAfter
+                            + (df > 0 ? "  (+" + df + " puan)" : "") + "    " + riskSeviyeEmoji(sAfter));
+                        kuralDurumuLogla(L, velHId, velH.getSahibiId(), velH,
+                            m, bOnce, true, yeniAliciMiydi4, false, sAfter);
                     } catch (model.YetersizBakiyeException e) {
                         basarisiz++;
-                        L.add("TXNFAIL:#" + String.format("%02d", no) + "  TRANSFER  │  " + velAd + "  [" + velHId + "]");
-                        L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m) + "    │    Mevcut bakiye: " + String.format(Locale.US, "%,.0f ₺", e.getMevcutBakiye()));
-                        L.add("TXNRISK:  ❌  Yetersiz bakiye — skor değişmedi");
-                        L.add("TXNSCORE: Skor değişmedi: " + kontrolcu.getRiskSkoru(velHId) + "/100");
+                        L.add("TXNFAIL:#" + String.format("%02d", no) + "  TRANSFER  │  " + velAd);
+                        L.add("TXNAMT:   Tutar: " + String.format(Locale.US, "%,.0f ₺", m)
+                            + "  │  Mevcut bakiye: " + String.format(Locale.US, "%,.0f ₺", e.getMevcutBakiye()));
+                        L.add("TXNRISK:  ❌  Yetersiz bakiye");
+                        L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(velHId) + "/100");
                     } catch (Exception e) {
                         basarisiz++;
-                        L.add("TXNFAIL:#" + String.format("%02d", no) + "  TRANSFER  │  " + velAd + "  [" + velHId + "]");
+                        L.add("TXNFAIL:#" + String.format("%02d", no) + "  TRANSFER  │  " + velAd);
                         L.add("TXNRISK:  ❌  " + e.getMessage());
                         L.add("TXNSCORE: Skor: " + kontrolcu.getRiskSkoru(velHId) + "/100");
                     }
                     L.add("TXNSEP:");
-                    try { Thread.sleep(20); } catch (InterruptedException ig) {}
+                    try { Thread.sleep(15); } catch (InterruptedException ig) {}
                 }
             }
+            int s4test = kontrolcu.getRiskSkoru(testH.getHesapId());
+            int s4vel  = velH != null ? kontrolcu.getRiskSkoru(velH.getHesapId()) : 0;
+            L.add("SCORE:▸ Aşama 4 tamamlandı.  "
+                + (velH != null ? velAd + " Skor: " + s4vel + "/100  " + riskSeviyeEmoji(s4vel)
+                                : "Aşama atlandı (tek müşteri)"));
+            L.add("INFO:");
 
-            // ── ÖZET ──────────────────────────────────────────────────────────────────────────
-            L.add("HEADER:ÖZET — Simülasíyon Tamamlandı  (30 İŞlem)");
+            // ── ÖZET ────────────────────────────────────────────────────────────────
+            L.add("HEADER:ÖZET — Simülasyon Tamamlandı  (30 İŞLEM)");
             L.add("OK:✓ Başarılı işlem sayısı    :  " + basarili);
             L.add("FAIL:✗ Başarısız / Engellenen  :  " + basarisiz);
-            int fSkor = kontrolcu.getRiskSkoru(testH.getHesapId());
-            L.add("SCORE:Test hesabı final skor   :  " + fSkor + "/100  —  " + riskSeviyeEmoji(fSkor));
-            if (velH != null) {
-                int vSkor = kontrolcu.getRiskSkoru(velH.getHesapId());
-                L.add("SCORE:Vel. hesabı final skor   :  " + vSkor + "/100  —  " + riskSeviyeEmoji(vSkor));
-            }
-            L.add("INFO:→ Admin Paneli — Risk & Limitler sekmesinde şüpheli hesapları ve sebeplerini görüntüleyin");
+            L.add("SCORE:Test hesabı final skor   :  " + s4test + "/100  —  " + riskSeviyeEmoji(s4test));
+            if (velH != null)
+                L.add("SCORE:Vel. hesabı final skor   :  " + s4vel + "/100  —  " + riskSeviyeEmoji(s4vel));
+            L.add("INFO:");
+            L.add("INFO:Gösterilen Risk Kuralları:");
+            L.add("INFO:  ✓ K7 Yeni Alıcı      — Aşama 2 (İşlem 7): yeni alıcıya transfer  +12 puan");
+            L.add("INFO:  ✓ K4 Yapılandırma    — Aşama 2 (İşlem 9): 3 ardışık eşik altı transfer  +20 puan");
+            L.add("INFO:  ✓ K2 Gece Çekimi     — Aşama 3 (İşlem 15): ilk gece çekimi  +20 puan  [Cooldown: İşlem 16'da yok]");
+            L.add("INFO:  ✓ K3 Ani Boşalma     — Aşama 3 (İşlem 17): bakiyenin %%92'si  +25 puan");
+            L.add("INFO:  ✓ K1 Hızlı Boşaltma  — Aşama 3 (İşlem 17): 3. çekim, toplam>>25K  +40 puan");
+            L.add("INFO:  ✓ K7 Büyük Transfer  — Aşama 4 (İşlem 23-25): yeni alıcıya ≥30K  +30 puan × 3");
+            L.add("INFO:  ✓ K1 Hızlı Boşaltma  — Aşama 4 (İşlem 25): K7 ile eş zamanlı  +40 puan");
+            L.add("INFO:  — K5 Anormal Hız     — Bu simülasyonda tetiklenmedi (KURUMSAL eşiği=50)");
+            L.add("INFO:  — K6 Günlük Limit    — Bu simülasyonda tetiklenmedi (<30 işlem/gün)");
+            L.add("INFO:");
+            L.add("INFO:→ Admin Paneli — Risk & Limitler sekmesinde şüpheli hesapları görüntüleyin");
 
             final java.util.List<String> sonLoglar = L;
             final int fb = basarili, fsz = basarisiz;
@@ -1423,10 +1571,14 @@ public class YoneticiPaneli extends BorderPane {
                 botSimLoglar = sonLoglar;
                 sonuclarBtn.setDisable(false);
                 botBtn.setDisable(false);
-                botBtn.setText("🤖 Bot Simülasíyonu (30 İŞlem)");
-                UITema.bilgi("Simülasíyon Tamamlandı",
-                    "✓ Başarılı: " + fb + "   ✗ Başarısız: " + fsz + "\n\n" +
-                    "Risk Yolculuğu:\n  🟢 GÜVENLİ → 🟡 İZLENİYOR → 🟠 RİSKLİ → 🔴 ŞÜPHELİ/DONDURULDU\n\n" +
+                botBtn.setText("🤖 Bot Simülasyonu (30 İŞlem)");
+                UITema.bilgi("Simülasyon Tamamlandı",
+                    "✓ Başarılı: " + fb + "   ✗ Engellenen: " + fsz + "\n\n" +
+                    "Risk Yolculuğu:\n" +
+                    "  Aşama 1 — 🟢 GÜVENLİ  (hiçbir kural yok)\n" +
+                    "  Aşama 2 — 🟡 İZLENİYOR  (K4 Yapılandırma + K7 Yeni Alıcı)\n" +
+                    "  Aşama 3 — 🔴 DONDURULDU  (K2 Gece + K3 Ani Boşalma + K1 Hızlı)\n" +
+                    "  Aşama 4 — 🔴 DONDURULDU  (K7 Büyük × 3 + K1 Hızlı)\n\n" +
                     "📋 Detaylar için \"Deneme Sonuçları\" butonuna tıklayın.");
             });
         }).start();
@@ -1437,6 +1589,83 @@ public class YoneticiPaneli extends BorderPane {
         if (skor >= 61) return "🟠 RİSKLİ";
         if (skor >= 31) return "🟡 İZLENİYOR";
         return "🟢 GÜVENLİ";
+    }
+
+    /** Her işlem sonunda 7-kural durum tablosunu ve skor çubuğunu log listesine ekler. */
+    private void kuralDurumuLogla(java.util.List<String> L,
+            String hesapId, String musteriId, Account hesap,
+            double txMiktar, double bakiyeOnce,
+            boolean isTransfer, boolean yeniAlici, boolean geceAktif,
+            int skorSonra) {
+        // Skor çubuğu
+        int dolu = Math.min(30, skorSonra * 30 / 100);
+        String bar = "█".repeat(dolu) + "░".repeat(30 - dolu);
+        L.add("TXNBAR:  [" + bar + "]  " + skorSonra + "/100  " + riskSeviyeEmoji(skorSonra));
+
+        // K1
+        long k1Count     = kontrolcu.k1CekimAdedi(hesapId);
+        double k1Total   = kontrolcu.k1ToplamCekim(hesapId);
+        boolean k1CD     = kontrolcu.k1CooldownAktifMi(hesapId);
+        String k1Durum   = (k1Count >= 3 && k1Total >= 25_000) ? "✅ TETİKLENDİ"
+                         : k1CD ? "⏸ COOLDOWN aktif" : "✗ bekliyor";
+        L.add("TXNDET:  K1 Hızlı Boşaltma  │ 10dk count=" + k1Count + "/3"
+            + "  toplam=" + String.format(Locale.US, "%,.0f₺", k1Total) + "/25.000₺"
+            + (k1CD ? "  [⏸ 10dk cooldown]" : "") + "  →  " + k1Durum);
+
+        // K2
+        boolean k2Esik   = geceAktif && txMiktar >= 5_000;
+        boolean k2CD     = kontrolcu.k2CooldownAktifMi(hesapId);
+        String k2Durum   = (k2Esik && !k2CD) ? "✅ TETİKLENDİ"
+                         : (k2Esik && k2CD)   ? "⏸ COOLDOWN aktif"
+                         : geceAktif ? "✗ miktar < 5.000₺" : "✗ gündüz (01:00-06:00 değil)";
+        L.add("TXNDET:  K2 Gece Çekimi     │ " + (geceAktif ? "🌙 gece modu aktif" : "gündüz")
+            + "  miktar=" + String.format(Locale.US, "%,.0f₺", txMiktar) + " (eşik≥5.000₺)"
+            + (k2CD ? "  [⏸ günlük cooldown]" : "") + "  →  " + k2Durum);
+
+        // K3
+        double k3Oran    = bakiyeOnce > 0 ? txMiktar / bakiyeOnce * 100 : 0;
+        String k3Durum   = (k3Oran >= 90 && txMiktar >= 10_000) ? "✅ TETİKLENDİ" : "✗ eşik altı";
+        L.add("TXNDET:  K3 Ani Boşalma     │ oran=%" + String.format("%.1f", k3Oran)
+            + " (eşik≥%%90, min 10.000₺)"
+            + "  →  " + k3Durum);
+
+        // K4
+        int k4Pattern    = kontrolcu.k4PatternSayisi(hesap);
+        String k4Durum   = k4Pattern >= 3 ? "✅ TETİKLENDİ" : "bekliyor (" + k4Pattern + "/3 işlem)";
+        L.add("TXNDET:  K4 Yapılandırma    │ son 10 işlemde " + k4Pattern + "/3 eşikaltı transfer"
+            + " (12.750-14.999₺ arası)"
+            + "  →  " + k4Durum);
+
+        // K5
+        long k5Vel       = kontrolcu.k5VelocitySayisi(musteriId);
+        boolean k5CD     = kontrolcu.k5CooldownAktifMi(musteriId);
+        KullaniciKategorisi kat = kontrolcu.getMusteriKategorisi(musteriId);
+        int k5Esik       = kat != null ? kat.velocityEsigi : 10;
+        String k5Kat     = kat != null ? kat.name() : "BİREYSEL";
+        String k5Durum   = (k5Vel >= k5Esik && !k5CD) ? "✅ TETİKLENDİ"
+                         : (k5Vel >= k5Esik && k5CD)   ? "⏸ COOLDOWN aktif" : "✗ eşik altı";
+        L.add("TXNDET:  K5 Anormal Hız     │ 5dk velocity=" + k5Vel + "/" + k5Esik
+            + " (" + k5Kat + " eşiği)"
+            + (k5CD ? "  [⏸ 5dk cooldown]" : "") + "  →  " + k5Durum);
+
+        // K6
+        int k6Count      = kontrolcu.k6GunlukIslemSayisi(hesapId);
+        String k6Durum   = k6Count >= 30 ? "✅ TETİKLENDİ" : "✗ eşik altı";
+        L.add("TXNDET:  K6 Günlük Limit    │ günlük işlem=" + k6Count + "/30"
+            + "  →  " + k6Durum);
+
+        // K7
+        if (isTransfer) {
+            String k7Detay = txMiktar >= 30_000 ? "≥30K → +30 puan"
+                           : txMiktar >= 10_000 ? "10K-30K → +12 puan" : "< 10K eşik altı";
+            String k7Durum = yeniAlici ? "✅ TETİKLENDİ" : "✗ bilinen alıcı";
+            L.add("TXNDET:  K7 Yeni Alıcı     │ " + (yeniAlici ? "⚠ YENİ alıcı" : "bilinen alıcı")
+                + "  miktar=" + String.format(Locale.US, "%,.0f₺", txMiktar)
+                + "  (" + k7Detay + ")"
+                + "  →  " + k7Durum);
+        } else {
+            L.add("TXNDET:  K7 Yeni Alıcı     │ [transfer değil — bu işlemde geçerli değil]");
+        }
     }
 
     private void botSonuclarGoster() {
@@ -1508,6 +1737,21 @@ public class YoneticiPaneli extends BorderPane {
                 lbl.setText(satir.substring(8));
                 lbl.setFont(Font.font("Segoe UI", 12));
                 lbl.setStyle("-fx-background-color: " + cardBg[0] + "; -fx-text-fill: #c9d1d9; -fx-padding: 2 12 1 26;");
+
+            } else if (satir.startsWith("TXNBAR:")) {
+                String barRenk = "FROZEN".equals(cardType[0]) ? "#ff5555" :
+                                 "WARN".equals(cardType[0])   ? "#ffcc44" :
+                                 "FAIL".equals(cardType[0])   ? "#ff8844" : "#3fb950";
+                lbl.setText(satir.substring(7));
+                lbl.setFont(Font.font("Consolas", FontWeight.BOLD, 11));
+                lbl.setStyle("-fx-background-color: " + cardBg[0] + "; -fx-text-fill: " + barRenk
+                    + "; -fx-padding: 3 12 2 26;");
+
+            } else if (satir.startsWith("TXNDET:")) {
+                lbl.setText(satir.substring(7));
+                lbl.setFont(Font.font("Consolas", 10));
+                lbl.setStyle("-fx-background-color: " + cardBg[0] + "; -fx-text-fill: #586070;"
+                    + "-fx-padding: 1 12 1 28;");
 
             } else if (satir.startsWith("TXNSCORE:")) {
                 String sc = "FROZEN".equals(cardType[0]) ? "#ff9090"
